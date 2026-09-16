@@ -1,0 +1,15 @@
+{
+  "name": "tiny-swords-last-stand",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tiny Swords: Last Stand - a browser arena survival game",
+  "scripts": {
+    "dev": "node serve.js",
+    "start": "node serve.js",
+    "test": "node tools/playtest.mjs",
+    "test:file": "node tools/playtest.mjs --file"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
