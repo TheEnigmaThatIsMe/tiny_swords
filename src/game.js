@@ -62,7 +62,7 @@ TS.Game = class Game {
     this.spawnAcc = 0; this.surgeT = TS.CFG.SURGE_EVERY; this.surgeLeft = 0; this.surgeTick = 0; this.surgeSide = 0;
     this.bossSpawned = false; this.boss = null; this.dawnAnnounced = false; this.introduced = {};
     this.hpMult = 1; this.dmgMult = 1; this.levelQueue = 0; this.choices = null; this.dyingT = 0; this.timeScale = 1;
-    this.hintT = 14; this.newBest = false; this.sheepT = 40; this.musicT = 0; this.botPickT = 0; this.announcement = null; this.queue.length = 0; this.modalT = 0;
+    this.hintT = 14; this.newBest = false; this.sheepT = 40; this.musicT = 0; this.botPickT = 0; this.announcement = null; this.queue.length = 0; this.modalT = 0; this.xpPop = 0;
   }
   startRun() {
     this.newWorld();
@@ -142,7 +142,7 @@ TS.Game = class Game {
     this.hpMult = TS.CFG.hpMult(tmin); this.dmgMult = TS.CFG.dmgMult(tmin);
     if (this.hintT > 0) this.hintT -= dt;
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
-    if (this.comboPop > 0) this.comboPop -= dt * 4; if (this.scorePop > 0) this.scorePop -= dt * 4;
+    if (this.comboPop > 0) this.comboPop -= dt * 4; if (this.scorePop > 0) this.scorePop -= dt * 4; if (this.xpPop > 0) this.xpPop -= dt;
     if (this.state === 'playing') this.updateSpawns(dt, tmin);
     if (this.bot && this.state === 'playing') this.botThink();
     const c = this.ctrl;
@@ -298,7 +298,7 @@ TS.Game = class Game {
     this.kills++; this.combo++; this.comboT = 2; this.comboPop = 1; if (this.combo > this.comboBest) this.comboBest = this.combo;
     const mult = (1 + 0.025 * Math.min(20, this.combo - 1)) * (1 + 0.05 * (this.time / 60));
     const pts = Math.round(e.scoreValue * mult); this.score += pts; this.scorePop = 0.25;
-    this.player.xp += e.xpValue;
+    this.player.xp += e.xpValue; this.xpPop = 0.3;
     if (this.player.lifesteal) this.player.heal(this.player.lifesteal, this);
     const gold = e.boss ? 40 : e.elite ? randInt(5, 8) : e.type === 'pawn' ? 1 : randInt(1, 3);
     for (let i = 0; i < gold; i++) this.spawnPickup('gold', e.x, e.y, 5);

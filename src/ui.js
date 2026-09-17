@@ -54,13 +54,17 @@ TS.UI = class UI {
     R.three('bigbar', 0, bx, by, bw, bs);
     if (frac > 0) R.ctx.drawImage(fillS.img, 0, 20, 64, 24, Math.round(innerX), Math.round(by + 11 * bs), Math.max(2, Math.round(innerW * frac)), Math.round(24 * bs));
     R.text(Math.ceil(P.hp) + ' / ' + P.maxHp, bx + bw / 2, by + 24 * bs, 13 * u, '#fff', 'center', 'middle');
-    // XP bar (small bar recess is rows 30-35, starting 10px into the left cap)
-    const xy = by + 38 * u, xs = u * 0.85;
-    const xInner = bx + 10 * xs, xInnerW = bw - 20 * xs, xFrac = clamp(P.xp / P.xpNext, 0, 1);
-    R.three('smallbar', 0, bx, xy, bw, xs);
-    if (xFrac > 0) { const fw = Math.max(2, Math.round(xInnerW * xFrac)); R.rect(xInner, xy + 8 * xs, fw, 6 * xs, '#ffd54a'); R.rect(xInner, xy + 8 * xs, fw, 2 * xs, '#fff3b0'); }
-    R.text('LV ' + P.level, bx + bw + 10 * u, xy + 9 * xs, 15 * u, '#ffd54a', 'left', 'middle');
-    R.text(Math.floor(P.xp) + ' / ' + P.xpNext + ' XP', bx + bw / 2, xy + 9 * xs, 9 * u, '#fff', 'center', 'middle', '#1e1a2e', 2 * u);
+    // XP bar: same big frame as HP at a smaller scale, gold fill in the recess (rows 20-43), flashes white on gain
+    const xy = by + 35 * u, xs = u * 0.44;
+    const xInner = bx + 12 * xs, xInnerW = bw - 24 * xs, xFrac = clamp(P.xp / P.xpNext, 0, 1);
+    R.three('bigbar', 0, bx, xy, bw, xs);
+    if (xFrac > 0) {
+      const fw = Math.max(2, Math.round(xInnerW * xFrac)), pop = clamp(g.xpPop * 4, 0, 1);
+      R.rect(xInner, xy + 11 * xs, fw, 24 * xs, pop > 0.5 ? '#ffffff' : '#e8b93a');
+      R.rect(xInner, xy + 11 * xs, fw, 9 * xs, pop > 0.5 ? '#ffffff' : '#ffe27a');
+    }
+    R.text(Math.floor(P.xp) + ' / ' + P.xpNext + ' XP', bx + bw / 2, xy + 23 * xs, 10 * u, '#fff', 'center', 'middle', '#1e1a2e', 2.5 * u);
+    R.text('LV ' + P.level, bx + bw + 10 * u, xy + 23 * xs, 15 * u * (1 + clamp(g.xpPop, 0, 0.25) * 0.8), '#ffd54a', 'left', 'middle');
     // timer
     const timeLeft = Math.max(0, TS.CFG.RUN_SECONDS - g.time);
     this.smallRibbon(fmtTime(g.time), R.W / 2, 12 * u, 'yellow', 22 * u, 150 * u);
@@ -157,6 +161,7 @@ TS.UI = class UI {
     this.button('play', 'PLAY', W / 2, py + ph + 56 * u, 240 * u, 76 * u, false);
     R.text('or press ENTER', W / 2, py + ph + 110 * u, 12 * u, '#fff', 'center', 'middle');
     R.text('Art: Tiny Swords by Pixel Frog (free pack)  ·  audio synthesized in-browser  ·  no downloads, no dependencies', W / 2, H - 16 * u, 11 * u, '#fff', 'center', 'middle');
+    R.text('v' + TS.VERSION, W - 12 * u, H - 16 * u, 11 * u, '#fff', 'right', 'middle');
   }
   drawEnd(g, won) {
     const R = this.R, u = R.ui, W = R.W, H = R.H;

@@ -9,7 +9,7 @@
   const errors = [];
   window.addEventListener('error', e => { errors.push(String(e.message || e)); });
   window.addEventListener('unhandledrejection', e => { errors.push('unhandledrejection: ' + String(e.reason)); });
-  const dbg = window.__game = { ready: false, state: 'loading', stats: null, errors, version: '1.0.0', setBot() {}, setSpeed() {}, start() {}, restart() {} };
+  const dbg = window.__game = { ready: false, state: 'loading', stats: null, errors, version: TS.VERSION, setBot() {}, setSpeed() {}, start() {}, restart() {} };
   let progress = 0, loadErr = null;
   function drawLoading() { TS.UI.drawLoading(R, progress, loadErr); if (!dbg.ready) requestAnimationFrame(drawLoading); }
   requestAnimationFrame(drawLoading);
