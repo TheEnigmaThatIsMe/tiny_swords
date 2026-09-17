@@ -32,10 +32,10 @@ TS.buildSprites = function () {
 };
 
 const ETYPES = {
-  pawn:    { hp: 28,  speed: 150, dmg: 8,  r: 14, xp: 3,  score: 10, range: 46,  windup: 0.32, recover: 0.4,  cd: 1.0, kbRes: 0,    interrupt: 2 },
-  warrior: { hp: 90,  speed: 108, dmg: 15, r: 18, xp: 8,  score: 30, range: 76,  windup: 0.5,  recover: 0.55, cd: 1.5, kbRes: 0.3,  interrupt: 1 },
-  archer:  { hp: 45,  speed: 125, dmg: 10, r: 14, xp: 6,  score: 25, keepMin: 230, keepMax: 420, shootRange: 480, shootT: 0.55, cd: 2.4, kbRes: 0, interrupt: 2 },
-  lancer:  { hp: 180, speed: 82,  dmg: 25, r: 22, xp: 20, score: 60, chargeRange: 440, telegraph: 0.7, chargeSpeed: 720, chargeT: 0.5, stagger: 0.9, cd: 3.2, pokeRange: 100, pokeDmg: 12, pokeWind: 0.45, pokeCd: 1.8, kbRes: 0.75, interrupt: 0 },
+  pawn:    { hp: 28,  speed: 150, dmg: 7,  r: 14, xp: 3,  score: 10, range: 46,  windup: 0.32, recover: 0.4,  cd: 1.0, kbRes: 0,    interrupt: 2 },
+  warrior: { hp: 90,  speed: 108, dmg: 12, r: 18, xp: 8,  score: 30, range: 76,  windup: 0.5,  recover: 0.55, cd: 1.5, kbRes: 0.3,  interrupt: 1 },
+  archer:  { hp: 45,  speed: 125, dmg: 9, r: 14, xp: 6,  score: 25, keepMin: 230, keepMax: 420, shootRange: 480, shootT: 0.55, cd: 2.4, kbRes: 0, interrupt: 2 },
+  lancer:  { hp: 180, speed: 82,  dmg: 22, r: 22, xp: 20, score: 60, chargeRange: 440, telegraph: 0.7, chargeSpeed: 720, chargeT: 0.5, stagger: 0.9, cd: 3.2, pokeRange: 100, pokeDmg: 12, pokeWind: 0.45, pokeCd: 1.8, kbRes: 0.75, interrupt: 0 },
   monk:    { hp: 60,  speed: 100, dmg: 0,  r: 15, xp: 10, score: 40, keepMin: 200, keepMax: 330, healRange: 240, healT: 0.9, healAmt: 0.25, cd: 3.0, kbRes: 0, interrupt: 2 },
 };
 TS.ETYPES = ETYPES;
@@ -59,7 +59,7 @@ class Player {
   reset(x, y) {
     this.x = x; this.y = y; this.vx = 0; this.vy = 0; this.kbx = 0; this.kby = 0;
     this.alive = true; this.state = 'idle'; this.facing = 1; this.aimA = 0; this.aimX = x + 100; this.aimY = y;
-    this.hp = 100; this.level = 1; this.xp = 0; this.xpNext = this.xpFor(1);
+    this.hp = 120; this.level = 1; this.xp = 0; this.xpNext = this.xpFor(1);
     for (const k of ['edge', 'quick', 'arc', 'heavy', 'fleet', 'iron', 'vamp', 'whirl', 'dashm', 'gold', 'second', 'adren', 'lucky']) this.upg[k] = 0;
     this.secondUsed = false; this.recalc(); this.hp = this.maxHp;
     this.attackT = 0; this.attackDur = 0.36; this.combo = 0; this.chain = 0; this.hitDone = false; this.queued = false; this.whirling = false; this.swingA = 0;
@@ -67,7 +67,7 @@ class Player {
     this.invT = 0; this.hurtT = 0; this.moving = false; this.runDust = 0; this.hitsThisSwing = 0; this.reviveT = 0;
     this.anim.restart(TS.SPR.blue.warrior.idle, 8, true);
   }
-  xpFor(level) { return Math.round(12 + level * 6 + level * level * 1.25); }
+  xpFor(level) { return Math.round(14 + level * 7 + level * level * 1.5); }
   recalc() {
     const u = this.upg;
     this.dmg = 15 * (1 + 0.25 * u.edge);
@@ -75,9 +75,9 @@ class Player {
     this.reach = 88 * (1 + 0.15 * u.arc); this.half = 1.15 + 0.2 * u.arc;
     this.kb = 260 * (1 + 0.4 * u.heavy); this.stunBonus = 0.12 * u.heavy;
     this.speed = 195 * (1 + 0.12 * u.fleet);
-    const oldMax = this.maxHp || 100; this.maxHp = 100 + 25 * u.iron; if (this.hp) this.hp = Math.min(this.maxHp, this.hp + (this.maxHp - oldMax));
+    const oldMax = this.maxHp || 120; this.maxHp = 120 + 30 * u.iron; if (this.hp) this.hp = Math.min(this.maxHp, this.hp + (this.maxHp - oldMax));
     this.dashCdMax = 1.6 * Math.pow(0.75, u.dashm); this.dashDist = 150 * Math.pow(1.25, u.dashm);
-    this.crit = 0.05 + 0.1 * u.lucky; this.lifesteal = 2 * u.vamp; this.magnet = 100 * (1 + 0.4 * u.gold); this.goldMult = 1 + 0.5 * u.gold;
+    this.crit = 0.05 + 0.1 * u.lucky; this.lifesteal = 2 * u.vamp; this.magnet = 130 * (1 + 0.4 * u.gold); this.goldMult = 1 + 0.5 * u.gold;
   }
   adrenaline() { return this.upg.adren && this.hp < this.maxHp * 0.35 ? 1.3 : 1; }
   heal(n, g) { const before = this.hp; this.hp = Math.min(this.maxHp, this.hp + n); const got = Math.round(this.hp - before); if (got > 0 && g) g.fx.text(this.x, this.y - 70, '+' + got, '#7CFC8A', 18); }
@@ -169,7 +169,7 @@ class Player {
   takeDamage(dmg, sx, sy, g) {
     if (!this.alive || this.invT > 0 || this.state === 'dash') return false;
     dmg = Math.round(dmg);
-    this.hp -= dmg; this.hurtT = 0.45; this.invT = 0.6;
+    this.hp -= dmg; this.hurtT = 0.45; this.invT = 0.7;
     const a = Math.atan2(this.y - sy, this.x - sx); this.kbx += Math.cos(a) * 240; this.kby += Math.sin(a) * 240;
     g.fx.shake(0.55); g.fx.stop(0.07); g.fx.screenFlash('#ff2a2a', 0.3);
     g.fx.text(this.x, this.y - 80, '-' + dmg, '#ff5555', 22);
@@ -381,7 +381,7 @@ class Enemy {
     if (!this.boss) this.stun = Math.max(this.stun, 0.12 + stunBonus);
     const it = this.cfg.interrupt;
     if (it === 2 && (this.state === 'windup' || this.state === 'shoot' || this.state === 'heal')) { this.state = 'chase'; this.cd = Math.max(this.cd, 0.4); }
-    else if (it === 1 && this.state === 'windup' && this.st > this.cfg.windup * 0.5) { this.state = 'chase'; this.cd = Math.max(this.cd, 0.5); }
+    else if (it === 1 && this.state === 'windup' && this.st > this.cfg.windup * 0.35) { this.state = 'chase'; this.cd = Math.max(this.cd, 0.5); }
     g.fx.text(this.x, this.y - 58 * this.scale, String(dmg), crit ? '#ffb347' : '#ffffff', crit ? 26 : 18);
     g.fx.spark(this.x, this.y - 28 * this.scale, crit ? 14 : 6, crit ? '#ffd166' : '#ffffff', crit ? 260 : 180, 3);
     g.sfxAt(crit ? 'crit' : 'hit', this.x, this.y);
@@ -408,6 +408,7 @@ class Enemy {
     if (this.state === 'stagger') { const wob = Math.sin(g.time * 30) * 4; R.sprite(this.anim.s, this.anim.frame, this.x + wob, this.y, flip, this.scale, alpha); }
     else R.sprite(this.anim.s, this.anim.frame, this.x, this.y, flip, this.scale, alpha);
     if (this.flash > 0) R.spriteTint(this.anim.s, this.anim.frame, this.x, this.y, flip, this.scale, '#ffffff', 0.85);
+    else if ((this.state === 'windup' && this.st < this.cfg.windup * 0.45) || (this.state === 'poke' && this.st < this.cfg.pokeWind * 0.5)) R.spriteTint(this.anim.s, this.anim.frame, this.x, this.y, flip, this.scale, '#ff3030', 0.35 + 0.25 * Math.sin(g.time * 40));
     if (this.state === 'stagger') R.text('*', this.x * R.zoom + R.ox, (this.y - 70 * this.scale) * R.zoom + R.oy + Math.sin(g.time * 12) * 3 * R.zoom, 22 * R.ui, '#ffe066', 'center', 'middle');
   }
   drawHpBar(R) {

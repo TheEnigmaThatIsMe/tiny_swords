@@ -518,7 +518,7 @@ async function main() {
 
         console.log(
           `t=${mmss(t)} hp=${stats.hp}/${stats.maxHp} lvl=${stats.level} kills=${stats.kills} ` +
-            `score=${stats.score} enemies=${stats.enemies} fps=${Math.round(stats.fps || 0)} state=${stats.state}`
+            `score=${stats.score} enemies=${stats.enemies} fps=${Math.round(stats.fps || 0)} ms=${(stats.frameMs || 0).toFixed(1)} state=${stats.state}`
         );
         if (Number.isFinite(stats.fps)) fpsSamples.push(stats.fps);
 

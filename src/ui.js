@@ -190,7 +190,7 @@ TS.UI = class UI {
       this.panel(x, y0 + (hover ? -6 * u : 0), cw, ch, hover ? 'paper' : 'paper');
       const yy = y0 + (hover ? -6 * u : 0);
       R.uiSprite(A.sheet('banner_slot'), 0, x + cw / 2, yy + 62 * u, u * 0.36);
-      R.uiSprite(A.sheet(c.icon), 0, x + cw / 2, yy + 62 * u, u * 0.85);
+      R.uiSpriteCentered(A.sheet(c.icon), c.frame || 0, x + cw / 2, yy + 62 * u, c.frame !== undefined ? u * 0.6 : u * 0.85);
       R.text('[' + (i + 1) + ']', x + 18 * u, yy + 22 * u, 13 * u, '#7a2d1a', 'left', 'middle', null);
       const rank = g.player.upg[c.key] || 0;
       R.text(c.name, x + cw / 2, yy + 122 * u, 17 * u, '#3b2a1a', 'center', 'middle', null);

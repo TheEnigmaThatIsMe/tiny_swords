@@ -124,6 +124,11 @@ TS.Renderer = class Renderer {
     if (alpha !== undefined && alpha !== 1) c.globalAlpha = 1;
     this.drawCalls++;
   }
+  // Draw a frame so its trimmed box is centred on (cx, cy), regardless of the sheet's anchor.
+  uiSpriteCentered(s, frame, cx, cy, scale) {
+    const i4 = frame * 4, t = s.t, tx = t[i4], ty = t[i4 + 1], tw = t[i4 + 2], th = t[i4 + 3];
+    this.uiSprite(s, frame, cx - (tx + tw / 2 - s.ax) * scale, cy - (ty + th / 2 - s.ay) * scale, scale);
+  }
   // 9-slice panel; x,y,w,h in device px; corner pieces drawn at native size * scale.
   nine(key, x, y, w, h, scale) {
     const n = TS_ATLAS.nine[key], img = n.img, xs = n.xs, ys = n.ys, c = this.ctx;

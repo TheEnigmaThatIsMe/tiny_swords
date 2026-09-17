@@ -1,26 +1,26 @@
 'use strict';
 // Game orchestration: run state, spawner + difficulty curve, combat glue, upgrades, camera, bot, debug API.
 TS.CFG = {
-  RUN_SECONDS: 600, BOSS_AT: 480, MAX_ENEMIES: 140, SURGE_EVERY: 60,
-  spawnRate: t => 0.55 + 0.42 * t,               // enemies per second, t in minutes
-  surgeCount: t => Math.round(6 + 4 * t),
-  hpMult: t => 1 + 0.13 * t,
+  RUN_SECONDS: 600, BOSS_AT: 480, MAX_ENEMIES: 100, SURGE_EVERY: 60,
+  spawnRate: t => 0.55 + 0.32 * t,               // enemy heads per second, t in minutes
+  surgeCount: t => Math.round(5 + 3 * t),
+  hpMult: t => 1 + 0.11 * t,
   dmgMult: t => 1 + 0.05 * t,
 };
 const UPGRADES = [
   { key: 'edge', name: 'Sharpened Edge', icon: 'icon5', max: 5, desc: '+25% sword damage.', flavor: 'Cuts deeper.' },
-  { key: 'quick', name: 'Quick Hands', icon: 'icon1', max: 4, desc: '+15% attack speed. Chains come out faster.', flavor: 'Blur of steel.' },
-  { key: 'arc', name: 'Wide Arc', icon: 'icon7', max: 3, desc: '+15% reach and a wider swing arc. Hit more of the crowd.', flavor: 'Sweep the field.' },
-  { key: 'heavy', name: 'Heavy Blows', icon: 'icon10', max: 2, desc: '+40% knockback and hits stun enemies longer.', flavor: 'Send them flying.' },
+  { key: 'quick', name: 'Quick Hands', icon: 'icon7', max: 4, desc: '+15% attack speed. Chains come out faster.', flavor: 'Blur of steel.' },
+  { key: 'arc', name: 'Wide Arc', icon: 'warrior_blue_attack1', frame: 2, max: 3, desc: '+15% reach and a wider swing arc. Hit more of the crowd.', flavor: 'Sweep the field.' },
+  { key: 'heavy', name: 'Heavy Blows', icon: 'icon1', max: 2, desc: '+40% knockback and hits stun enemies longer.', flavor: 'Send them flying.' },
   { key: 'fleet', name: 'Fleet Foot', icon: 'icon8', max: 3, desc: '+12% move speed.', flavor: 'Never get cornered.' },
-  { key: 'iron', name: 'Iron Skin', icon: 'icon6', max: 4, desc: '+25 max HP and heal 25 now.', flavor: 'Built to last.' },
+  { key: 'iron', name: 'Iron Skin', icon: 'icon6', max: 4, desc: '+30 max HP and heal 30 now.', flavor: 'Built to last.' },
   { key: 'vamp', name: 'Vampiric Blade', icon: 'icon4', max: 3, desc: 'Heal 2 HP on every kill.', flavor: 'Feast on the horde.' },
-  { key: 'whirl', name: 'Whirlwind', icon: 'icon11', max: 1, desc: 'Every third chained swing becomes a 360° spin for 150% damage.', flavor: 'Nowhere is safe.' },
-  { key: 'dashm', name: 'Dash Mastery', icon: 'icon2', max: 3, desc: '-25% dash cooldown, +25% dash distance.', flavor: 'Blink and miss.' },
+  { key: 'whirl', name: 'Whirlwind', icon: 'warrior_blue_attack2', frame: 2, max: 1, desc: 'Every third chained swing becomes a 360° spin for 150% damage.', flavor: 'Nowhere is safe.' },
+  { key: 'dashm', name: 'Dash Mastery', icon: 'fx_dust2', frame: 1, max: 3, desc: '-25% dash cooldown, +25% dash distance.', flavor: 'Blink and miss.' },
   { key: 'gold', name: 'Gold Rush', icon: 'icon3', max: 2, desc: 'Coins worth +50% and a +40% wider magnet.', flavor: 'Fortune favours.' },
-  { key: 'second', name: 'Second Wind', icon: 'icon12', max: 1, desc: 'Once per run, survive a killing blow with 50% HP.', flavor: 'Not today.' },
-  { key: 'adren', name: 'Adrenaline', icon: 'icon9', max: 1, desc: 'Below 35% HP: +30% damage, attack speed and move speed.', flavor: 'Cornered beast.' },
-  { key: 'lucky', name: 'Lucky Strike', icon: 'icon3', max: 3, desc: '+10% critical chance. Crits deal double damage.', flavor: 'Right between the eyes.' },
+  { key: 'second', name: 'Second Wind', icon: 'warrior_blue_guard', frame: 2, max: 1, desc: 'Once per run, survive a killing blow with 50% HP.', flavor: 'Not today.' },
+  { key: 'adren', name: 'Adrenaline', icon: 'fx_fire3', frame: 3, max: 1, desc: 'Below 35% HP: +30% damage, attack speed and move speed.', flavor: 'Cornered beast.' },
+  { key: 'lucky', name: 'Lucky Strike', icon: 'fx_explosion1', frame: 2, max: 3, desc: '+10% critical chance. Crits deal double damage.', flavor: 'Right between the eyes.' },
 ];
 const INTRO = { warrior: ['WARRIORS LANDED', 'They wind up before swinging. Step in after the miss.'], archer: ['ARCHERS SIGHTED', 'Close the distance. Dash through arrows.'], lancer: ['LANCERS!', 'Red line = charge path. Sidestep, then punish the stagger.'], monk: ['MONKS ARRIVE', 'They heal the horde. Kill them first.'] };
 
@@ -113,10 +113,9 @@ TS.Game = class Game {
   // ---- fixed step ------------------------------------------------------
   step(dt) {
     const fx = this.fx;
-    if (this.state === 'menu' || this.state === 'paused' || this.state === 'levelup' || this.state === 'gameover' || this.state === 'victory') {
+    if (this.state === 'menu' || this.state === 'paused' || this.state === 'levelup') {
       this.world.updateAmbient(dt);
       if (this.state === 'menu') { this.menuT += dt; this.player.anim.update(dt); for (let i = 0; i < this.sheep.active; i++) this.sheep.items[i].update(dt, this); }
-      if (this.state === 'gameover' || this.state === 'victory') fx.update(dt);
       if (this.state === 'levelup' && this.bot) { this.botPickT -= dt; if (this.botPickT <= 0) this.botChoose(); }
       this.updateAnnouncement(dt);
       return;
@@ -134,7 +133,7 @@ TS.Game = class Game {
     if (this.state === 'playing') this.updateSpawns(dt, tmin);
     if (this.bot && this.state === 'playing') this.botThink();
     const c = this.ctrl;
-    if (this.player.alive) this.player.update(dt, c, this);
+    if (this.player.alive && this.state !== 'victory') this.player.update(dt, c, this);
     c.attackPressed = false; c.dash = false;
     const E = this.enemies;
     for (let i = 0; i < E.active; i++) { const e = E.items[i]; if (e.alive) e.update(dt, this); }
@@ -225,7 +224,7 @@ TS.Game = class Game {
     const wP = 10 - Math.min(5, t * 0.6);
     const wW = t >= 1 ? Math.min(6, 1 + 2 * (t - 1)) : 0;
     const wA = t >= 2 ? Math.min(4, 1 + 1.5 * (t - 2)) : 0;
-    const wL = t >= 3.5 ? Math.min(3, 0.8 + (t - 3.5)) : 0;
+    const wL = t >= 3.5 ? Math.min(2.5, 0.6 + 0.7 * (t - 3.5)) : 0;
     const wM = t >= 5 ? Math.min(2, 0.6 + 0.6 * (t - 5)) : 0;
     let r = Math.random() * (wP + wW + wA + wL + wM);
     if ((r -= wP) < 0) return 'pawn'; if ((r -= wW) < 0) return 'warrior'; if ((r -= wA) < 0) return 'archer'; if ((r -= wL) < 0) return 'lancer'; return 'monk';
@@ -240,25 +239,28 @@ TS.Game = class Game {
     const x = w.tileCenterX(tile), y = w.tileCenterY(tile);
     const n = type === 'pawn' ? randInt(2, 3) : 1;
     const elite = t >= 6 && Math.random() < 0.08 + 0.03 * (t - 6);
+    let made = 0;
     for (let i = 0; i < n; i++) {
-      const e = this.enemies.alloc(); if (!e) return;
+      const e = this.enemies.alloc(); if (!e) break;
+      made++;
       e.init(type, x + (Math.random() - 0.5) * 40, y + (Math.random() - 0.5) * 30, elite ? 'black' : 'red', elite, false, this);
       this.fx.fx(TS.SPR.splash, e.x, e.y - 20, { fps: 18, scale: 0.9 });
     }
     this.sfxAt('spawn', x, y, { vol: 0.5 });
     if (INTRO[type] && !this.introduced[type]) { this.introduced[type] = true; this.announce(INTRO[type][0], type === 'lancer' ? 'red' : 'purple', 2.6, INTRO[type][1]); }
+    return made;
   }
   updateSpawns(dt, t) {
     const E = this.enemies;
     this.spawnAcc += TS.CFG.spawnRate(t) * dt;
-    while (this.spawnAcc >= 1) { this.spawnAcc -= 1; if (E.active < TS.CFG.MAX_ENEMIES) this.spawnOne(this.pickType(t), undefined, t); }
+    while (this.spawnAcc >= 1) { if (E.active >= TS.CFG.MAX_ENEMIES) { this.spawnAcc = 0; break; } this.spawnAcc -= Math.max(1, this.spawnOne(this.pickType(t), undefined, t)); }
     this.surgeT -= dt;
     if (this.surgeT <= 0) {
       this.surgeT = TS.CFG.SURGE_EVERY; this.wave++; this.surgeLeft = TS.CFG.surgeCount(t); this.surgeSide = randInt(0, 3); this.surgeTick = 0;
       this.announce('WAVE ' + this.wave, 'red', 2.2, ['from the north', 'from the east', 'from the south', 'from the west'][this.surgeSide]);
       SFX.play('wave');
     }
-    if (this.surgeLeft > 0) { this.surgeTick -= dt; if (this.surgeTick <= 0) { this.surgeTick = 0.14; if (E.active < TS.CFG.MAX_ENEMIES + 20) this.spawnOne(this.pickType(t), this.surgeSide, t); this.surgeLeft--; } }
+    if (this.surgeLeft > 0) { this.surgeTick -= dt; if (this.surgeTick <= 0) { this.surgeTick = 0.14; if (E.active < TS.CFG.MAX_ENEMIES + 20) this.surgeLeft -= Math.max(1, this.spawnOne(this.pickType(t), this.surgeSide, t)); else this.surgeLeft--; } }
     if (!this.bossSpawned && this.time >= TS.CFG.BOSS_AT) {
       this.bossSpawned = true;
       const w = this.world, tile = w.shoreFar(this.player.x, this.player.y, 600, null);
@@ -285,7 +287,7 @@ TS.Game = class Game {
     if (this.player.lifesteal) this.player.heal(this.player.lifesteal, this);
     const gold = e.boss ? 40 : e.elite ? randInt(5, 8) : e.type === 'pawn' ? 1 : randInt(1, 3);
     for (let i = 0; i < gold; i++) this.spawnPickup('gold', e.x, e.y, 5);
-    if (Math.random() < (e.elite ? 0.3 : 0.03)) this.spawnPickup('meat', e.x, e.y, 20);
+    if (Math.random() < (e.elite ? 0.3 : 0.05)) this.spawnPickup('meat', e.x, e.y, 20);
     this.fx.fx(TS.SPR.dust2, e.x, e.y - 6, { fps: 22, layer: 0, scale: e.scale });
     this.fx.burst(e.x, e.y - 24 * e.scale, e.elite ? 24 : 10, e.color === 'black' ? ['#3a3a4a', '#8a3a4a', '#ffffff'] : ['#c0392b', '#ffffff', '#f5b7b1'], 200);
     this.fx.text(e.x, e.y - 76 * e.scale, '+' + pts, '#ffd54a', 15);
@@ -322,7 +324,7 @@ TS.Game = class Game {
     const P = this.player, avail = UPGRADES.filter(u => (P.upg[u.key] || 0) < u.max);
     for (let i = avail.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const t = avail[i]; avail[i] = avail[j]; avail[j] = t; }
     this.choices = avail.slice(0, 3);
-    while (this.choices.length < 3) this.choices.push({ key: 'rations', name: 'Rations', icon: 'icon4', max: 1, desc: 'Heal 40 HP.', flavor: 'Simple pleasures.' });
+    while (this.choices.length < 3) this.choices.push({ key: 'rations', name: 'Rations', icon: 'meat', max: 1, desc: 'Heal 40 HP.', flavor: 'Simple pleasures.' });
     this.state = 'levelup'; this.botPickT = 0.3;
     SFX.play('levelup'); this.fx.screenFlash('#ffffff', 0.35);
     this.fx.text(P.x, P.y - 90, 'LEVEL UP!', '#ffd54a', 26);
@@ -330,7 +332,7 @@ TS.Game = class Game {
   chooseUpgrade(i) {
     const P = this.player, c = this.choices[i]; if (!c) return;
     if (c.key === 'rations') P.heal(40, this);
-    else { P.upg[c.key] = (P.upg[c.key] || 0) + 1; P.recalc(); if (c.key === 'iron') P.heal(25, this); }
+    else { P.upg[c.key] = (P.upg[c.key] || 0) + 1; P.recalc(); if (c.key === 'iron') P.heal(30, this); }
     this.levelQueue--; this.choices = null; this.state = 'playing';
     P.invT = Math.max(P.invT, 0.6);
     this.fx.burst(P.x, P.y - 30, 24, ['#ffd54a', '#ffffff', '#c973ff'], 220);
@@ -341,17 +343,18 @@ TS.Game = class Game {
   botChoose() { const pri = ['edge', 'iron', 'quick', 'vamp', 'arc', 'whirl', 'second', 'fleet', 'dashm', 'lucky', 'heavy', 'adren', 'gold', 'rations']; let best = 0, bi = 99; for (let i = 0; i < 3; i++) { const k = pri.indexOf(this.choices[i].key); if (k >= 0 && k < bi) { bi = k; best = i; } } this.chooseUpgrade(best); }
   botThink() {
     const P = this.player, E = this.enemies, c = this.ctrl;
-    let near = null, nd = 1e9, threat = null, count = 0, cxs = 0, cys = 0;
+    let near = null, nd = 1e9, threat = null, count = 0, cxs = 0, cys = 0, wind = null, windD = 1e9, winds = 0;
     for (let i = 0; i < E.active; i++) {
       const e = E.items[i]; if (!e.alive) continue;
       const dx = e.x - P.x, dy = e.y - P.y, d = Math.sqrt(dx * dx + dy * dy);
       let score = d; if (e.type === 'monk') score *= 0.5; if (e.type === 'archer') score *= 0.75;
       if (score < nd) { nd = score; near = e; }
       if (d < 110) { count++; cxs += dx; cys += dy; }
+      if ((e.state === 'windup' || e.state === 'poke') && d < 120) { winds++; if (d < windD) { windD = d; wind = e; } }
       if (e.type === 'lancer' && (e.state === 'telegraph' || e.state === 'charge') && d < 380) {
-        const along = dx * -e.dx + dy * -e.dy; // projection of player rel. to lancer onto charge dir (negated because dx is enemy-player)
+        const along = -(dx * e.dx + dy * e.dy); // player position relative to the lancer, projected on its charge direction
         const perp = Math.abs(dx * e.dy - dy * e.dx);
-        if (along < 0 && perp < 70) threat = e;
+        if (along > 0 && perp < 80) threat = e;
       }
     }
     c.mx = 0; c.my = 0; c.attack = false;
@@ -360,12 +363,15 @@ TS.Game = class Game {
     if (threat) {
       const px = -threat.dy, py = threat.dx; const side = ((P.x - threat.x) * px + (P.y - threat.y) * py) >= 0 ? 1 : -1;
       c.mx = px * side; c.my = py * side; if (P.dashCd <= 0 && Math.sqrt(sqr(threat.x - P.x) + sqr(threat.y - P.y)) < 260) c.dash = true;
-    } else if (meat) { const dx = meat.x - P.x, dy = meat.y - P.y, d = Math.max(1, Math.sqrt(dx * dx + dy * dy)); c.mx = dx / d; c.my = dy / d; }
+    } else if (wind) { const dx = P.x - wind.x, dy = P.y - wind.y, d = Math.max(1, Math.sqrt(dx * dx + dy * dy)); c.mx = dx / d; c.my = dy / d; if (winds >= 2 && P.dashCd <= 0) c.dash = true; }
+    else if (meat) { const dx = meat.x - P.x, dy = meat.y - P.y, d = Math.max(1, Math.sqrt(dx * dx + dy * dy)); c.mx = dx / d; c.my = dy / d; }
     else if (near) {
       const dx = near.x - P.x, dy = near.y - P.y, d = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+      const w = this.world, ccx = w.cx - P.x, ccy = w.cy - P.y, cd = Math.sqrt(ccx * ccx + ccy * ccy);
       if (count > 6 && P.hp < P.maxHp * 0.6) { const l = Math.max(1, Math.sqrt(cxs * cxs + cys * cys)); c.mx = -cxs / l; c.my = -cys / l; if (count > 9 && P.dashCd <= 0) c.dash = true; }
+      else if (d > 280) { if (cd > 240) { c.mx = ccx / cd; c.my = ccy / cd; } } // fight from open ground: let far enemies come to you
       else if (d > P.reach * 0.7) { c.mx = dx / d; c.my = dy / d; }
-    }
+    } else { const w = this.world, ccx = w.cx - P.x, ccy = w.cy - P.y, cd = Math.sqrt(ccx * ccx + ccy * ccy); if (cd > 240) { c.mx = ccx / cd; c.my = ccy / cd; } }
     if (near) { c.aimX = near.x; c.aimY = near.y; const d = Math.sqrt(sqr(near.x - P.x) + sqr(near.y - P.y)); if (d < P.reach + near.r + 18) { c.attack = true; c.attackPressed = true; } }
     else { c.aimX = P.x + 100; c.aimY = P.y; }
     // arrows incoming
@@ -385,6 +391,7 @@ TS.Game = class Game {
     const E = this.enemies;
     fx.drawGround(R);
     for (let i = 0; i < E.active; i++) { const e = E.items[i]; if (e.state === 'telegraph' && R.visible(e.x - 500, e.y - 500, 1000, 1000)) e.drawTelegraph(R); }
+    if (P.alive && st !== 'menu') { const c = R.ctx; R.worldTransform(); c.globalAlpha = 0.35; c.strokeStyle = '#eaf6ff'; c.lineWidth = 3; c.beginPath(); c.ellipse(P.x, P.y + 2, 24, 12, 0, 0, TAU); c.stroke(); c.globalAlpha = 1; R.identity(); }
     // shadows
     for (let i = 0; i < E.active; i++) { const e = E.items[i]; if (R.visible(e.x - 60, e.y - 60, 120, 120)) e.drawShadow(R); }
     if (P.alive) { const s = TS.SPR.shadow; R.imageWorld(s.img, s.u[0], s.u[1], s.u[2], s.u[3], P.x - 26, P.y - 11, 52, 24, 0.7); }
