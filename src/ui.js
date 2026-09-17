@@ -50,17 +50,17 @@ TS.UI = class UI {
     const fillS = A.sheet('bigbar_fill');
     const innerX = bx + 12 * bs, innerW = bw - 24 * bs;
     const frac = clamp(P.hp / P.maxHp, 0, 1);
-    R.rect(innerX, by + 11 * bs, innerW, 24 * bs, '#3a1d2b');
-    if (frac > 0) R.ctx.drawImage(fillS.img, 0, 20, 64, 24, Math.round(innerX), Math.round(by + 11 * bs), Math.round(innerW * frac), Math.round(24 * bs));
+    // The base sprites are opaque in the middle, so fills are drawn on top, inset to the recess (rows 20-43 of the big bar).
     R.three('bigbar', 0, bx, by, bw, bs);
+    if (frac > 0) R.ctx.drawImage(fillS.img, 0, 20, 64, 24, Math.round(innerX), Math.round(by + 11 * bs), Math.max(2, Math.round(innerW * frac)), Math.round(24 * bs));
     R.text(Math.ceil(P.hp) + ' / ' + P.maxHp, bx + bw / 2, by + 24 * bs, 13 * u, '#fff', 'center', 'middle');
-    // XP bar
-    const xy = by + 38 * u, xs = u * 0.7;
-    const xInner = bx + 12 * xs, xInnerW = bw - 24 * xs;
-    R.rect(xInner, xy + 6 * xs, xInnerW, 8 * xs, '#2b2540');
-    R.rect(xInner, xy + 6 * xs, xInnerW * clamp(P.xp / P.xpNext, 0, 1), 8 * xs, '#ffd54a');
+    // XP bar (small bar recess is rows 30-35, starting 10px into the left cap)
+    const xy = by + 38 * u, xs = u * 0.85;
+    const xInner = bx + 10 * xs, xInnerW = bw - 20 * xs, xFrac = clamp(P.xp / P.xpNext, 0, 1);
     R.three('smallbar', 0, bx, xy, bw, xs);
-    R.text('LV ' + P.level, bx + bw + 10 * u, xy + 8 * xs, 15 * u, '#ffd54a', 'left', 'middle');
+    if (xFrac > 0) { const fw = Math.max(2, Math.round(xInnerW * xFrac)); R.rect(xInner, xy + 8 * xs, fw, 6 * xs, '#ffd54a'); R.rect(xInner, xy + 8 * xs, fw, 2 * xs, '#fff3b0'); }
+    R.text('LV ' + P.level, bx + bw + 10 * u, xy + 9 * xs, 15 * u, '#ffd54a', 'left', 'middle');
+    R.text(Math.floor(P.xp) + ' / ' + P.xpNext + ' XP', bx + bw / 2, xy + 9 * xs, 9 * u, '#fff', 'center', 'middle', '#1e1a2e', 2 * u);
     // timer
     const timeLeft = Math.max(0, TS.CFG.RUN_SECONDS - g.time);
     this.smallRibbon(fmtTime(g.time), R.W / 2, 12 * u, 'yellow', 22 * u, 150 * u);
@@ -81,10 +81,9 @@ TS.UI = class UI {
     if (g.boss && g.boss.alive) {
       const b = g.boss, w = 420 * u, x = R.W / 2 - w / 2, y = 84 * u, s = u * 0.55;
       R.text('THE WARLORD', R.W / 2, y - 8 * u, 13 * u, '#ff8080', 'center', 'middle');
-      const ix = x + 12 * s, iw = w - 24 * s;
-      R.rect(ix, y + 11 * s, iw, 24 * s, '#2a1520');
-      R.ctx.drawImage(fillS.img, 0, 20, 64, 24, Math.round(ix), Math.round(y + 11 * s), Math.round(iw * clamp(b.hp / b.maxHp, 0, 1)), Math.round(24 * s));
+      const ix = x + 12 * s, iw = w - 24 * s, bf = clamp(b.hp / b.maxHp, 0, 1);
       R.three('bigbar', 0, x, y, w, s);
+      if (bf > 0) R.ctx.drawImage(fillS.img, 0, 20, 64, 24, Math.round(ix), Math.round(y + 11 * s), Math.max(2, Math.round(iw * bf)), Math.round(24 * s));
     }
     // dash + mute (bottom-left)
     const dx = 46 * u, dy = R.H - 46 * u;
