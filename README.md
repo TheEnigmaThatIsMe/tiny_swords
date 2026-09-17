@@ -23,6 +23,14 @@ python3 tools/gen_atlas.py   # regenerate src/atlas-data.js (sprite trims, ancho
 
 URL flags: `?fps=1` shows the FPS counter from the start, `?bot=1` lets the built-in bot play (also disables auto-pause; used by the play-test).
 
+## Deploy to GitHub Pages
+
+The game is plain static files with relative paths, so it runs unchanged from a Pages subpath such as `https://<user>.github.io/tiny_swords/`. A `.nojekyll` file is checked in so Pages serves the asset folder verbatim.
+
+1. The repository must be public (GitHub Free only builds Pages from public repos): `gh repo edit --visibility public --accept-visibility-change-consequences`.
+2. Enable Pages from the main branch root: `gh api -X POST repos/<user>/tiny_swords/pages -f build_type=legacy -f "source[branch]=main" -f "source[path]=/"` (or Settings > Pages > Deploy from a branch > main / root).
+3. Wait a minute for the first build, then open `https://<user>.github.io/tiny_swords/`. Every later push to main redeploys automatically.
+
 ## Controls
 
 | Action | Keys |
