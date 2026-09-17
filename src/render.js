@@ -46,8 +46,8 @@ TS.Renderer = class Renderer {
   // --- world sprites -----------------------------------------------------
   sprite(s, frame, x, y, flip, scale, alpha) {
     if (scale === undefined) scale = 1;
-    const i4 = frame * 4, t = s.t;
-    const tx = t[i4], ty = t[i4 + 1], tw = t[i4 + 2], th = t[i4 + 3];
+    const i6 = frame * 6, t = s.t;
+    const tx = t[i6], ty = t[i6 + 1], tw = t[i6 + 2], th = t[i6 + 3], px = t[i6 + 4], py = t[i6 + 5];
     const z = this.zoom * scale;
     const ax = x * this.zoom + this.ox, ay = y * this.zoom + this.oy; // device anchor
     const dw = Math.round(tw * z), dh = Math.round(th * z);
@@ -57,12 +57,12 @@ TS.Renderer = class Renderer {
     if (!flip) {
       const dx = Math.round(ax + (tx - s.ax) * z);
       if (dx + dw < 0 || dy + dh < 0 || dx > this.W || dy > this.H) { if (alpha !== undefined && alpha !== 1) c.globalAlpha = 1; return; }
-      c.drawImage(s.img, frame * s.fw + tx, ty, tw, th, dx, dy, dw, dh);
+      c.drawImage(s.img, px, py, tw, th, dx, dy, dw, dh);
     } else {
       const dx = Math.round(ax - (tx - s.ax + tw) * z);
       if (dx + dw < 0 || dy + dh < 0 || dx > this.W || dy > this.H) { if (alpha !== undefined && alpha !== 1) c.globalAlpha = 1; return; }
       c.setTransform(-1, 0, 0, 1, dx + dw, dy);
-      c.drawImage(s.img, frame * s.fw + tx, ty, tw, th, 0, 0, dw, dh);
+      c.drawImage(s.img, px, py, tw, th, 0, 0, dw, dh);
       c.setTransform(1, 0, 0, 1, 0, 0);
     }
     if (alpha !== undefined && alpha !== 1) c.globalAlpha = 1;
@@ -71,26 +71,26 @@ TS.Renderer = class Renderer {
   // Sprite rotated around its anchor (used for arrows).
   spriteRot(s, frame, x, y, angle, scale, alpha) {
     if (scale === undefined) scale = 1;
-    const i4 = frame * 4, t = s.t;
-    const tx = t[i4], ty = t[i4 + 1], tw = t[i4 + 2], th = t[i4 + 3];
+    const i6 = frame * 6, t = s.t;
+    const tx = t[i6], ty = t[i6 + 1], tw = t[i6 + 2], th = t[i6 + 3], px = t[i6 + 4], py = t[i6 + 5];
     const z = this.zoom * scale;
     const c = this.ctx;
     const cos = Math.cos(angle), sin = Math.sin(angle);
     if (alpha !== undefined && alpha !== 1) c.globalAlpha = alpha;
     c.setTransform(cos * z, sin * z, -sin * z, cos * z, x * this.zoom + this.ox, y * this.zoom + this.oy);
-    c.drawImage(s.img, frame * s.fw + tx, ty, tw, th, tx - s.ax, ty - s.ay, tw, th);
+    c.drawImage(s.img, px, py, tw, th, tx - s.ax, ty - s.ay, tw, th);
     c.setTransform(1, 0, 0, 1, 0, 0);
     if (alpha !== undefined && alpha !== 1) c.globalAlpha = 1;
     this.drawCalls++;
   }
   // Solid-colour silhouette of a frame (hit flash). Uses a scratch canvas + source-in; no pixel reads (file:// safe).
   spriteTint(s, frame, x, y, flip, scale, color, alpha) {
-    const i4 = frame * 4, t = s.t;
-    const tx = t[i4], ty = t[i4 + 1], tw = t[i4 + 2], th = t[i4 + 3];
+    const i6 = frame * 6, t = s.t;
+    const tx = t[i6], ty = t[i6 + 1], tw = t[i6 + 2], th = t[i6 + 3];
     const sc = this.sctx;
     sc.globalCompositeOperation = 'source-over';
     sc.clearRect(0, 0, tw, th);
-    sc.drawImage(s.img, frame * s.fw + tx, ty, tw, th, 0, 0, tw, th);
+    sc.drawImage(s.img, t[i6 + 4], t[i6 + 5], tw, th, 0, 0, tw, th);
     sc.globalCompositeOperation = 'source-in';
     sc.fillStyle = color; sc.fillRect(0, 0, tw, th);
     sc.globalCompositeOperation = 'source-over';
@@ -116,17 +116,17 @@ TS.Renderer = class Renderer {
   identity() { this.ctx.setTransform(1, 0, 0, 1, 0, 0); }
   // --- UI (device pixels) --------------------------------------------------
   uiSprite(s, frame, sx, sy, scale, alpha) {
-    const i4 = frame * 4, t = s.t;
-    const tx = t[i4], ty = t[i4 + 1], tw = t[i4 + 2], th = t[i4 + 3];
+    const i6 = frame * 6, t = s.t;
+    const tx = t[i6], ty = t[i6 + 1], tw = t[i6 + 2], th = t[i6 + 3];
     const c = this.ctx;
     if (alpha !== undefined && alpha !== 1) c.globalAlpha = alpha;
-    c.drawImage(s.img, frame * s.fw + tx, ty, tw, th, Math.round(sx + (tx - s.ax) * scale), Math.round(sy + (ty - s.ay) * scale), Math.round(tw * scale), Math.round(th * scale));
+    c.drawImage(s.img, t[i6 + 4], t[i6 + 5], tw, th, Math.round(sx + (tx - s.ax) * scale), Math.round(sy + (ty - s.ay) * scale), Math.round(tw * scale), Math.round(th * scale));
     if (alpha !== undefined && alpha !== 1) c.globalAlpha = 1;
     this.drawCalls++;
   }
   // Draw a frame so its trimmed box is centred on (cx, cy), regardless of the sheet's anchor.
   uiSpriteCentered(s, frame, cx, cy, scale) {
-    const i4 = frame * 4, t = s.t, tx = t[i4], ty = t[i4 + 1], tw = t[i4 + 2], th = t[i4 + 3];
+    const i6 = frame * 6, t = s.t, tx = t[i6], ty = t[i6 + 1], tw = t[i6 + 2], th = t[i6 + 3];
     this.uiSprite(s, frame, cx - (tx + tw / 2 - s.ax) * scale, cy - (ty + th / 2 - s.ay) * scale, scale);
   }
   // 9-slice panel; x,y,w,h in device px; corner pieces drawn at native size * scale.

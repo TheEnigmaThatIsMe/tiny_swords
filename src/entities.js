@@ -16,7 +16,7 @@ TS.buildSprites = function () {
   for (const c of ['red', 'black']) {
     SPR[c] = {
       pawn: { idle: A.sheet('pawn_' + c + '_idle'), run: A.sheet('pawn_' + c + '_run'), attack: A.sheet('pawn_' + c + '_attack') },
-      warrior: { idle: A.sheet('warrior_' + c + '_idle'), run: A.sheet('warrior_' + c + '_run'), attack: A.sheet('warrior_' + c + '_attack1'), guard: A.sheet('warrior_' + c + '_guard') },
+      warrior: { idle: A.sheet('warrior_' + c + '_idle'), run: A.sheet('warrior_' + c + '_run'), attack: A.sheet('warrior_' + c + '_attack1') },
       archer: { idle: A.sheet('archer_' + c + '_idle'), run: A.sheet('archer_' + c + '_run'), attack: A.sheet('archer_' + c + '_shoot') },
       monk: { idle: A.sheet('monk_' + c + '_idle'), run: A.sheet('monk_' + c + '_run'), attack: A.sheet('monk_' + c + '_heal'), healfx: A.sheet('monk_' + c + '_healfx') },
       lancer: { idle: A.sheet('lancer_' + c + '_idle'), run: A.sheet('lancer_' + c + '_run'),

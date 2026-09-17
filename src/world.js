@@ -215,8 +215,8 @@ TS.World = class World {
     for (let i = 0; i < this.grassTiles.length; i++) {
       const t = this.grassTiles[i]; const c = t % this.gw, r = (t / this.gw) | 0;
       const b = blob[this.blobMask(c, r, isG)];
-      g.drawImage(tm1, b[0] * TILE, b[1] * TILE, TILE, TILE, c * TILE, r * TILE, TILE, TILE);
-      if (isP(c, r)) { const b2 = blob[this.blobMask(c, r, isP)]; g.drawImage(tm2, b2[0] * TILE, b2[1] * TILE, TILE, TILE, c * TILE, r * TILE, TILE, TILE); }
+      g.drawImage(tm1.img, tm1.ox + b[0] * TILE, tm1.oy + b[1] * TILE, TILE, TILE, c * TILE, r * TILE, TILE, TILE);
+      if (isP(c, r)) { const b2 = blob[this.blobMask(c, r, isP)]; g.drawImage(tm2.img, tm2.ox + b2[0] * TILE, tm2.oy + b2[1] * TILE, TILE, TILE, c * TILE, r * TILE, TILE, TILE); }
     }
     for (let i = 0; i < this.decor.length; i++) { const d = this.decor[i]; if (d.shadowW) drawShadow(d.x + 3, d.y - 2, d.shadowW, d.shadowW * 0.5, 0.75); }
     for (let i = 0; i < this.buildings.length; i++) { const b = this.buildings[i]; drawShadow(b.x + 8, b.y - 20, b.w + 40, 90, 0.8); }

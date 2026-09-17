@@ -52,7 +52,7 @@ TS.UI = class UI {
     const frac = clamp(P.hp / P.maxHp, 0, 1);
     // The base sprites are opaque in the middle, so fills are drawn on top, inset to the recess (rows 20-43 of the big bar).
     R.three('bigbar', 0, bx, by, bw, bs);
-    if (frac > 0) R.ctx.drawImage(fillS.img, 0, 20, 64, 24, Math.round(innerX), Math.round(by + 11 * bs), Math.max(2, Math.round(innerW * frac)), Math.round(24 * bs));
+    if (frac > 0) R.ctx.drawImage(fillS.img, fillS.u[0], fillS.u[1], 64, 24, Math.round(innerX), Math.round(by + 11 * bs), Math.max(2, Math.round(innerW * frac)), Math.round(24 * bs));
     R.text(Math.ceil(P.hp) + ' / ' + P.maxHp, bx + bw / 2, by + 24 * bs, 13 * u, '#fff', 'center', 'middle');
     // XP bar: same big frame as HP at a smaller scale, gold fill in the recess (rows 20-43), flashes white on gain
     const xy = by + 35 * u, xs = u * 0.44;
@@ -87,7 +87,7 @@ TS.UI = class UI {
       R.text('THE WARLORD', R.W / 2, y - 8 * u, 13 * u, '#ff8080', 'center', 'middle');
       const ix = x + 12 * s, iw = w - 24 * s, bf = clamp(b.hp / b.maxHp, 0, 1);
       R.three('bigbar', 0, x, y, w, s);
-      if (bf > 0) R.ctx.drawImage(fillS.img, 0, 20, 64, 24, Math.round(ix), Math.round(y + 11 * s), Math.max(2, Math.round(iw * bf)), Math.round(24 * s));
+      if (bf > 0) R.ctx.drawImage(fillS.img, fillS.u[0], fillS.u[1], 64, 24, Math.round(ix), Math.round(y + 11 * s), Math.max(2, Math.round(iw * bf)), Math.round(24 * s));
     }
     // dash + mute (bottom-left)
     const dx = 46 * u, dy = R.H - 46 * u;
@@ -160,7 +160,7 @@ TS.UI = class UI {
     else R.text('No runs yet. Good luck.', W / 2, ty, 14 * u, '#7a2d1a', 'center', 'middle', null);
     this.button('play', 'PLAY', W / 2, py + ph + 56 * u, 240 * u, 76 * u, false);
     R.text('or press ENTER', W / 2, py + ph + 110 * u, 12 * u, '#fff', 'center', 'middle');
-    R.text('Art: Tiny Swords by Pixel Frog (free pack)  ·  audio synthesized in-browser  ·  no downloads, no dependencies', W / 2, H - 16 * u, 11 * u, '#fff', 'center', 'middle');
+    R.text('Art: Tiny Swords by Pixel Frog  ·  pixelfrog-assets.itch.io/tiny-swords  ·  code & audio: original, synthesized in-browser', W / 2, H - 16 * u, 11 * u, '#fff', 'center', 'middle');
     R.text('v' + TS.VERSION, W - 12 * u, H - 16 * u, 11 * u, '#fff', 'right', 'middle');
   }
   drawEnd(g, won) {
@@ -204,11 +204,11 @@ TS.UI = class UI {
       for (let l = 0; l < lines.length; l++) R.text(lines[l], x + cw / 2, yy + 172 * u + l * 19 * u, 13 * u, '#3b2a1a', 'center', 'middle', null);
       if (c.flavor) R.text(c.flavor, x + cw / 2, yy + ch - 26 * u, 11 * u, '#7a2d1a', 'center', 'middle', null);
       if (hover) {
-        const cs = A.sheet('cursor4'), img = cs.img, s = u * 0.5, cw2 = 21 * s, chh = 25 * s;
-        R.ctx.drawImage(img, 3, 3, 21, 25, x - 4 * u, yy - 4 * u, cw2, chh);
-        R.ctx.drawImage(img, 104, 3, 21, 25, x + cw + 4 * u - cw2, yy - 4 * u, cw2, chh);
-        R.ctx.drawImage(img, 3, 100, 21, 25, x - 4 * u, yy + ch + 4 * u - chh, cw2, chh);
-        R.ctx.drawImage(img, 104, 100, 21, 25, x + cw + 4 * u - cw2, yy + ch + 4 * u - chh, cw2, chh);
+        const cs = A.sheet('cursor4'), img = cs.img, s = u * 0.5, cw2 = 21 * s, chh = 25 * s, ox = cs.u[0] - cs.t[0], oy = cs.u[1] - cs.t[1];
+        R.ctx.drawImage(img, ox + 3, oy + 3, 21, 25, x - 4 * u, yy - 4 * u, cw2, chh);
+        R.ctx.drawImage(img, ox + 104, oy + 3, 21, 25, x + cw + 4 * u - cw2, yy - 4 * u, cw2, chh);
+        R.ctx.drawImage(img, ox + 3, oy + 100, 21, 25, x - 4 * u, yy + ch + 4 * u - chh, cw2, chh);
+        R.ctx.drawImage(img, ox + 104, oy + 100, 21, 25, x + cw + 4 * u - cw2, yy + ch + 4 * u - chh, cw2, chh);
         if (I.clicked[0]) this.clickedId = 'card' + i;
       }
     }

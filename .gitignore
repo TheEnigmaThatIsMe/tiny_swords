@@ -2,3 +2,5 @@
 node_modules/
 playtest-shots/
 *.log
+# The Tiny Swords pack is a build input only: its licence forbids redistributing it. Download from itch.io.
+Tiny Swords (Free Pack)/
