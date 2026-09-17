@@ -46,7 +46,7 @@ TS.UI = class UI {
     R.uiSprite(A.sheet('banner_slot'), 0, 16 * u + 42 * u, 16 * u + 42 * u, u * 0.45);
     R.uiSprite(A.sheet('avatar1'), 0, 16 * u + 42 * u, 16 * u + 40 * u, u * 0.36);
     // HP bar
-    const bx = 110 * u, by = 20 * u, bw = 300 * u, bs = u * 0.6;
+    const bx = 110 * u, by = 20 * u, bw = Math.min(300 * u, R.W / 2 - 255 * u), bs = u * 0.6; // never runs into the centred timer block
     const fillS = A.sheet('bigbar_fill');
     const innerX = bx + 12 * bs, innerW = bw - 24 * bs;
     const frac = clamp(P.hp / P.maxHp, 0, 1);
@@ -63,8 +63,7 @@ TS.UI = class UI {
       R.rect(xInner, xy + 11 * xs, fw, 24 * xs, pop > 0.5 ? '#ffffff' : '#e8b93a');
       R.rect(xInner, xy + 11 * xs, fw, 9 * xs, pop > 0.5 ? '#ffffff' : '#ffe27a');
     }
-    R.text(Math.floor(P.xp) + ' / ' + P.xpNext + ' XP', bx + bw / 2, xy + 23 * xs, 10 * u, '#fff', 'center', 'middle', '#1e1a2e', 2.5 * u);
-    R.text('LV ' + P.level, bx + bw + 10 * u, xy + 23 * xs, 15 * u * (1 + clamp(g.xpPop, 0, 0.25) * 0.8), '#ffd54a', 'left', 'middle');
+    R.text('LV ' + P.level + '   ·   ' + Math.floor(P.xp) + ' / ' + P.xpNext + ' XP', bx + bw / 2, xy + 23 * xs, 10 * u * (1 + clamp(g.xpPop, 0, 0.25) * 0.5), '#fff', 'center', 'middle', '#1e1a2e', 2.5 * u);
     // timer
     const timeLeft = Math.max(0, TS.CFG.RUN_SECONDS - g.time);
     this.smallRibbon(fmtTime(g.time), R.W / 2, 12 * u, 'yellow', 22 * u, 150 * u);

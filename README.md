@@ -2,7 +2,7 @@
 
 **Play it in your browser: https://theenigmathatisme.github.io/tiny_swords/**
 
-![Minute six: the horde closes in around the castle](docs/screenshot.png)
+![Gameplay: chaining sword swings through the horde at minute four](docs/gameplay.gif)
 
 A browser arena-survival game built on Pixel Frog's **Tiny Swords** free art pack.
 Hold a small island against an escalating horde for ten minutes, chain sword swings through crowds, dash out of lancer charges, level up and pick upgrades. Vanilla Canvas 2D, no framework, no runtime dependencies.
