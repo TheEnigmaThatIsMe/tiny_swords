@@ -1,11 +1,12 @@
 'use strict';
 // Game orchestration: run state, spawner + difficulty curve, combat glue, upgrades, camera, bot, debug API.
 TS.CFG = {
-  RUN_SECONDS: 600, BOSS_AT: 480, MAX_ENEMIES: 100, SURGE_EVERY: 60,
-  spawnRate: t => 0.55 + 0.32 * t,               // enemy heads per second, t in minutes
-  surgeCount: t => Math.round(5 + 3 * t),
-  hpMult: t => 1 + 0.11 * t,
-  dmgMult: t => 1 + 0.05 * t,
+  RUN_SECONDS: 600, BOSS_AT: 480, SURGE_EVERY: 60,
+  maxEnemies: t => Math.round(90 + 5 * t),        // alive cap grows from 90 to 140 over the run
+  spawnRate: t => 0.6 + 0.34 * t,                // enemy heads per second, t in minutes
+  surgeCount: t => Math.round(6 + 4 * t),
+  hpMult: t => 1 + 0.1 * t + 0.012 * t * t,      // 1.8x at 5:00, 3.2x at 10:00
+  dmgMult: t => 1 + 0.07 * t,
 };
 const UPGRADES = [
   { key: 'edge', name: 'Sharpened Edge', icon: 'icon5', max: 5, desc: '+25% sword damage.', flavor: 'Cuts deeper.' },
@@ -13,8 +14,8 @@ const UPGRADES = [
   { key: 'arc', name: 'Wide Arc', icon: 'warrior_blue_attack1', frame: 2, max: 3, desc: '+15% reach and a wider swing arc. Hit more of the crowd.', flavor: 'Sweep the field.' },
   { key: 'heavy', name: 'Heavy Blows', icon: 'icon1', max: 2, desc: '+40% knockback and hits stun enemies longer.', flavor: 'Send them flying.' },
   { key: 'fleet', name: 'Fleet Foot', icon: 'icon8', max: 3, desc: '+12% move speed.', flavor: 'Never get cornered.' },
-  { key: 'iron', name: 'Iron Skin', icon: 'icon6', max: 4, desc: '+30 max HP and heal 30 now.', flavor: 'Built to last.' },
-  { key: 'vamp', name: 'Vampiric Blade', icon: 'icon4', max: 3, desc: 'Heal 2 HP on every kill.', flavor: 'Feast on the horde.' },
+  { key: 'iron', name: 'Iron Skin', icon: 'icon6', max: 4, desc: '+25 max HP and heal 25 now.', flavor: 'Built to last.' },
+  { key: 'vamp', name: 'Vampiric Blade', icon: 'icon4', max: 3, desc: 'Heal 1 HP on every kill.', flavor: 'Feast on the horde.' },
   { key: 'whirl', name: 'Whirlwind', icon: 'warrior_blue_attack2', frame: 2, max: 1, desc: 'Every third chained swing becomes a 360° spin for 150% damage.', flavor: 'Nowhere is safe.' },
   { key: 'dashm', name: 'Dash Mastery', icon: 'fx_dust2', frame: 1, max: 3, desc: '-25% dash cooldown, +25% dash distance.', flavor: 'Blink and miss.' },
   { key: 'gold', name: 'Gold Rush', icon: 'icon3', max: 2, desc: 'Coins worth +50% and a +40% wider magnet.', flavor: 'Fortune favours.' },
@@ -22,6 +23,7 @@ const UPGRADES = [
   { key: 'adren', name: 'Adrenaline', icon: 'fx_fire3', frame: 3, max: 1, desc: 'Below 35% HP: +30% damage, attack speed and move speed.', flavor: 'Cornered beast.' },
   { key: 'lucky', name: 'Lucky Strike', icon: 'fx_explosion1', frame: 2, max: 3, desc: '+10% critical chance. Crits deal double damage.', flavor: 'Right between the eyes.' },
 ];
+const SFX_GATE = { hit: 70, crit: 110, kill: 100, swing: 130, coin: 55, spawn: 260, arrow: 140, charge: 280, heal: 300, hurt: 90, dash: 110, meat: 200, boom: 220, whirl: 140 };
 const INTRO = { warrior: ['WARRIORS LANDED', 'They wind up before swinging. Step in after the miss.'], archer: ['ARCHERS SIGHTED', 'Close the distance. Dash through arrows.'], lancer: ['LANCERS!', 'Red line = charge path. Sidestep, then punish the stagger.'], monk: ['MONKS ARRIVE', 'They heal the horde. Kill them first.'] };
 
 TS.Game = class Game {
@@ -37,7 +39,7 @@ TS.Game = class Game {
     this.bot = false; this.speed = 1; this.showFps = false; this.speedSteps = 1;
     this.best = TS.storage.get('ts_laststand_best', null);
     this.stats = { time: 0, hp: 0, maxHp: 0, level: 1, kills: 0, score: 0, enemies: 0, fps: 0, frameMs: 0, updateMs: 0, drawMs: 0, state: 'menu', wave: 0, fxCount: 0, draws: 0 };
-    this.sfxOpts = { pitch: 1, vol: 1, pan: 0 };
+    this.sfxOpts = { pitch: 1, vol: 1, pan: 0 }; this.sfxLast = Object.create(null); this.sfxRecent = Object.create(null);
     this.cell = 96; this.gcols = 0; this.grows = 0; this.buckets = []; this.used = [];
     this.state = 'menu'; this.time = 0; this.menuT = 0; this.announcement = null; this.queue = [];
     this.camX = 0; this.camY = 0;
@@ -60,7 +62,7 @@ TS.Game = class Game {
     this.spawnAcc = 0; this.surgeT = TS.CFG.SURGE_EVERY; this.surgeLeft = 0; this.surgeTick = 0; this.surgeSide = 0;
     this.bossSpawned = false; this.boss = null; this.dawnAnnounced = false; this.introduced = {};
     this.hpMult = 1; this.dmgMult = 1; this.levelQueue = 0; this.choices = null; this.dyingT = 0; this.timeScale = 1;
-    this.hintT = 14; this.newBest = false; this.sheepT = 40; this.musicT = 0; this.botPickT = 0; this.announcement = null; this.queue.length = 0;
+    this.hintT = 14; this.newBest = false; this.sheepT = 40; this.musicT = 0; this.botPickT = 0; this.announcement = null; this.queue.length = 0; this.modalT = 0;
   }
   startRun() {
     this.newWorld();
@@ -76,11 +78,18 @@ TS.Game = class Game {
     this.announcement = { text, style, dur, sub, t: 0 };
   }
   // ---- audio helper with distance attenuation ---------------------------
+  // Positional sound with per-name rate gating and ducking: a horde must not turn into white noise.
   sfxAt(name, x, y, opts) {
     const P = this.player, d = Math.sqrt(sqr(x - P.x) + sqr(y - P.y));
+    if (d > 950) return;
+    const now = performance.now(), last = this.sfxLast[name] || 0, gate = SFX_GATE[name] || 50;
+    if (now - last < gate) return;
+    const rc = (this.sfxRecent[name] || 0) * Math.exp(-(now - last) / 600) + 1; // repeats in roughly the last second
+    this.sfxRecent[name] = rc; this.sfxLast[name] = now;
+    const duck = 1 / (1 + 0.2 * Math.max(0, rc - 2));
     const o = this.sfxOpts;
-    o.pitch = opts && opts.pitch !== undefined ? opts.pitch : 1;
-    o.vol = (opts && opts.vol !== undefined ? opts.vol : 1) * clamp(1 - (d - 260) / 900, 0.12, 1);
+    o.pitch = (opts && opts.pitch !== undefined ? opts.pitch : 1) * (name === 'coin' ? 1 + Math.min(0.6, (rc - 1) * 0.04) : 1);
+    o.vol = (opts && opts.vol !== undefined ? opts.vol : 1) * clamp(1 - (d - 260) / 900, 0.12, 1) * duck;
     o.pan = clamp((x - P.x) / 700, -1, 1);
     SFX.play(name, o);
   }
@@ -92,14 +101,16 @@ TS.Game = class Game {
     if (this.state === 'menu') {
       if (I.hit('Enter') || I.hit('Space') || this.ui.consumeClick('play')) this.startRun();
     } else if (this.state === 'playing') {
-      if (I.hit('Escape') || I.hit('KeyP')) { this.state = 'paused'; SFX.play('click'); }
+      if (I.hit('Escape') || I.hit('KeyP')) { this.state = 'paused'; SFX.pauseMusic(); SFX.play('click'); }
     } else if (this.state === 'paused') {
-      if (I.hit('Escape') || I.hit('KeyP') || this.ui.consumeClick('resume')) { this.state = 'playing'; SFX.play('click'); }
+      if (I.hit('Escape') || I.hit('KeyP') || this.ui.consumeClick('resume')) { this.state = 'playing'; SFX.resumeMusic(); SFX.play('click'); }
       if (I.hit('KeyQ')) this.toMenu();
     } else if (this.state === 'levelup') {
-      for (let i = 0; i < 3; i++) if (I.hit('Digit' + (i + 1)) || I.hit('Numpad' + (i + 1)) || this.ui.consumeClick('card' + i)) { this.chooseUpgrade(i); break; }
+      if (this.modalT >= 0.45) { for (let i = 0; i < 3; i++) if (I.hit('Digit' + (i + 1)) || I.hit('Numpad' + (i + 1)) || this.ui.consumeClick('card' + i)) { this.chooseUpgrade(i); break; } }
+      else { this.ui.clickedId = null; }
     } else if (this.state === 'gameover' || this.state === 'victory') {
-      if (I.hit('KeyR') || I.hit('Enter') || this.ui.consumeClick('again')) this.startRun();
+      if (this.modalT < 0.8) this.ui.clickedId = null;
+      else if (I.hit('KeyR') || I.hit('Enter') || this.ui.consumeClick('again')) this.startRun();
       else if (I.hit('Escape')) this.toMenu();
     }
     if (this.bot) return;
@@ -114,12 +125,14 @@ TS.Game = class Game {
   step(dt) {
     const fx = this.fx;
     if (this.state === 'menu' || this.state === 'paused' || this.state === 'levelup') {
+      this.modalT += dt;
       this.world.updateAmbient(dt);
       if (this.state === 'menu') { this.menuT += dt; this.player.anim.update(dt); for (let i = 0; i < this.sheep.active; i++) this.sheep.items[i].update(dt, this); }
       if (this.state === 'levelup' && this.bot) { this.botPickT -= dt; if (this.botPickT <= 0) this.botChoose(); }
       this.updateAnnouncement(dt);
       return;
     }
+    this.modalT += dt;
     if (fx.hitstop > 0) { fx.hitstop -= dt; fx.updateRealtime(dt); return; }
     if (this.state === 'dying') { this.dyingT -= dt; if (this.dyingT <= 0) { this.endRun(false); return; } }
     dt *= this.timeScale;
@@ -136,6 +149,7 @@ TS.Game = class Game {
     if (this.player.alive && this.state !== 'victory') this.player.update(dt, c, this);
     c.attackPressed = false; c.dash = false;
     const E = this.enemies;
+    if (E.active > 0) this.world.computeFlow(this.player.x, this.player.y);
     for (let i = 0; i < E.active; i++) { const e = E.items[i]; if (e.alive) e.update(dt, this); }
     this.rebuildGrid(); this.separate();
     for (let i = E.active - 1; i >= 0; i--) if (!E.items[i].alive) E.free(i);
@@ -238,7 +252,7 @@ TS.Game = class Game {
     const tile = w.shoreFar(P.x, P.y, 560, side === undefined ? null : this.sideFilter(side));
     const x = w.tileCenterX(tile), y = w.tileCenterY(tile);
     const n = type === 'pawn' ? randInt(2, 3) : 1;
-    const elite = t >= 6 && Math.random() < 0.08 + 0.03 * (t - 6);
+    const elite = t >= 6 && Math.random() < 0.08 + 0.04 * (t - 6);
     let made = 0;
     for (let i = 0; i < n; i++) {
       const e = this.enemies.alloc(); if (!e) break;
@@ -253,14 +267,15 @@ TS.Game = class Game {
   updateSpawns(dt, t) {
     const E = this.enemies;
     this.spawnAcc += TS.CFG.spawnRate(t) * dt;
-    while (this.spawnAcc >= 1) { if (E.active >= TS.CFG.MAX_ENEMIES) { this.spawnAcc = 0; break; } this.spawnAcc -= Math.max(1, this.spawnOne(this.pickType(t), undefined, t)); }
+    const cap = TS.CFG.maxEnemies(t);
+    while (this.spawnAcc >= 1) { if (E.active >= cap) { this.spawnAcc = 0; break; } this.spawnAcc -= Math.max(1, this.spawnOne(this.pickType(t), undefined, t)); }
     this.surgeT -= dt;
     if (this.surgeT <= 0) {
       this.surgeT = TS.CFG.SURGE_EVERY; this.wave++; this.surgeLeft = TS.CFG.surgeCount(t); this.surgeSide = randInt(0, 3); this.surgeTick = 0;
       this.announce('WAVE ' + this.wave, 'red', 2.2, ['from the north', 'from the east', 'from the south', 'from the west'][this.surgeSide]);
       SFX.play('wave');
     }
-    if (this.surgeLeft > 0) { this.surgeTick -= dt; if (this.surgeTick <= 0) { this.surgeTick = 0.14; if (E.active < TS.CFG.MAX_ENEMIES + 20) this.surgeLeft -= Math.max(1, this.spawnOne(this.pickType(t), this.surgeSide, t)); else this.surgeLeft--; } }
+    if (this.surgeLeft > 0) { this.surgeTick -= dt; if (this.surgeTick <= 0) { this.surgeTick = 0.14; if (E.active < cap + 20) this.surgeLeft -= Math.max(1, this.spawnOne(this.pickType(t), this.surgeSide, t)); else this.surgeLeft--; } }
     if (!this.bossSpawned && this.time >= TS.CFG.BOSS_AT) {
       this.bossSpawned = true;
       const w = this.world, tile = w.shoreFar(this.player.x, this.player.y, 600, null);
@@ -279,9 +294,9 @@ TS.Game = class Game {
     else { P.heal(k.val, this); this.sfxAt('meat', P.x, P.y); this.fx.burst(P.x, P.y - 30, 12, ['#7CFC8A', '#ffffff'], 140); }
   }
   // ---- combat glue -------------------------------------------------------
-  onEnemyKilled(e) {
+  onEnemyKilled(e, quiet) {
     this.kills++; this.combo++; this.comboT = 2; this.comboPop = 1; if (this.combo > this.comboBest) this.comboBest = this.combo;
-    const mult = (1 + 0.1 * Math.min(20, this.combo - 1)) * (1 + 0.1 * (this.time / 60));
+    const mult = (1 + 0.025 * Math.min(20, this.combo - 1)) * (1 + 0.05 * (this.time / 60));
     const pts = Math.round(e.scoreValue * mult); this.score += pts; this.scorePop = 0.25;
     this.player.xp += e.xpValue;
     if (this.player.lifesteal) this.player.heal(this.player.lifesteal, this);
@@ -291,9 +306,9 @@ TS.Game = class Game {
     this.fx.fx(TS.SPR.dust2, e.x, e.y - 6, { fps: 22, layer: 0, scale: e.scale });
     this.fx.burst(e.x, e.y - 24 * e.scale, e.elite ? 24 : 10, e.color === 'black' ? ['#3a3a4a', '#8a3a4a', '#ffffff'] : ['#c0392b', '#ffffff', '#f5b7b1'], 200);
     this.fx.text(e.x, e.y - 76 * e.scale, '+' + pts, '#ffd54a', 15);
-    this.sfxAt('kill', e.x, e.y, { pitch: e.type === 'lancer' ? 0.7 : 1 });
+    if (!quiet) this.sfxAt('kill', e.x, e.y, { pitch: e.type === 'lancer' ? 0.7 : 1 });
     if (e.elite || e.boss) { this.fx.fx(TS.SPR.explosion2, e.x, e.y - 30 * e.scale, { fps: 18, scale: e.boss ? 1.8 : 1 }); this.fx.shake(e.boss ? 1 : 0.5); this.fx.stop(e.boss ? 0.2 : 0.09); this.sfxAt('boom', e.x, e.y); }
-    if (e.boss) { this.boss = null; this.score += 1500; this.announce('WARLORD SLAIN', 'yellow', 3, '+1500'); }
+    if (e.boss) { this.boss = null; this.score += 3000; this.announce('WARLORD SLAIN', 'yellow', 3, '+3000'); }
   }
   onPlayerDeath() {
     this.state = 'dying'; this.dyingT = 1.6; this.timeScale = 0.25;
@@ -310,7 +325,7 @@ TS.Game = class Game {
       for (let i = E.active - 1; i >= 0; i--) if (!E.items[i].alive) E.free(i);
       this.score += 2000; this.fx.screenFlash('#ffe9b0', 0.8); SFX.stopMusic(); SFX.play('victory');
     }
-    this.state = won ? 'victory' : 'gameover';
+    this.state = won ? 'victory' : 'gameover'; this.modalT = 0;
     const rec = { score: Math.round(this.score), time: Math.round(this.time), level: this.player.level, kills: this.kills, won };
     if (!this.best || rec.score > this.best.score) { this.best = rec; this.newBest = true; TS.storage.set('ts_laststand_best', rec); }
   }
@@ -325,15 +340,15 @@ TS.Game = class Game {
     for (let i = avail.length - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const t = avail[i]; avail[i] = avail[j]; avail[j] = t; }
     this.choices = avail.slice(0, 3);
     while (this.choices.length < 3) this.choices.push({ key: 'rations', name: 'Rations', icon: 'meat', max: 1, desc: 'Heal 40 HP.', flavor: 'Simple pleasures.' });
-    this.state = 'levelup'; this.botPickT = 0.3;
-    SFX.play('levelup'); this.fx.screenFlash('#ffffff', 0.35);
+    this.state = 'levelup'; this.botPickT = 0.3; this.modalT = 0;
+    SFX.pauseMusic(); SFX.play('levelup'); this.fx.screenFlash('#ffffff', 0.35);
     this.fx.text(P.x, P.y - 90, 'LEVEL UP!', '#ffd54a', 26);
   }
   chooseUpgrade(i) {
     const P = this.player, c = this.choices[i]; if (!c) return;
     if (c.key === 'rations') P.heal(40, this);
-    else { P.upg[c.key] = (P.upg[c.key] || 0) + 1; P.recalc(); if (c.key === 'iron') P.heal(30, this); }
-    this.levelQueue--; this.choices = null; this.state = 'playing';
+    else { P.upg[c.key] = (P.upg[c.key] || 0) + 1; P.recalc(); if (c.key === 'iron') P.heal(25, this); }
+    this.levelQueue--; this.choices = null; this.state = 'playing'; SFX.resumeMusic();
     P.invT = Math.max(P.invT, 0.6);
     this.fx.burst(P.x, P.y - 30, 24, ['#ffd54a', '#ffffff', '#c973ff'], 220);
     SFX.play('select');
@@ -369,7 +384,7 @@ TS.Game = class Game {
       const dx = near.x - P.x, dy = near.y - P.y, d = Math.max(1, Math.sqrt(dx * dx + dy * dy));
       const w = this.world, ccx = w.cx - P.x, ccy = w.cy - P.y, cd = Math.sqrt(ccx * ccx + ccy * ccy);
       if (count > 6 && P.hp < P.maxHp * 0.6) { const l = Math.max(1, Math.sqrt(cxs * cxs + cys * cys)); c.mx = -cxs / l; c.my = -cys / l; if (count > 9 && P.dashCd <= 0) c.dash = true; }
-      else if (d > 280) { if (cd > 240) { c.mx = ccx / cd; c.my = ccy / cd; } } // fight from open ground: let far enemies come to you
+      else if (d > 280 && near.type !== 'archer' && near.type !== 'monk') { if (cd > 240) { c.mx = ccx / cd; c.my = ccy / cd; } } // fight from open ground: let melee come to you, but hunt ranged units
       else if (d > P.reach * 0.7) { c.mx = dx / d; c.my = dy / d; }
     } else { const w = this.world, ccx = w.cx - P.x, ccy = w.cy - P.y, cd = Math.sqrt(ccx * ccx + ccy * ccy); if (cd > 240) { c.mx = ccx / cd; c.my = ccy / cd; } }
     if (near) { c.aimX = near.x; c.aimY = near.y; const d = Math.sqrt(sqr(near.x - P.x) + sqr(near.y - P.y)); if (d < P.reach + near.r + 18) { c.attack = true; c.attackPressed = true; } }

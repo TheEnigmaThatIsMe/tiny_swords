@@ -28,7 +28,7 @@
     if (params.get('bot') === '1') { game.setBot(true); }
     let last = performance.now(), acc = 0, fpsEma = 60, frameEma = 16.7, rafPending = false, lastRafAt = performance.now();
     // Auto-pause when the window loses focus (not in bot mode, which runs unattended).
-    const autoPause = () => { if (game.state === 'playing' && !game.bot) game.state = 'paused'; };
+    const autoPause = () => { if (game.state === 'playing' && !game.bot) { game.state = 'paused'; SFX.pauseMusic(); } };
     window.addEventListener('blur', autoPause);
     document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause(); });
     function rafFrame(now) { rafPending = false; lastRafAt = performance.now(); frame(now); }

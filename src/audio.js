@@ -5,7 +5,7 @@
  *
  * SFX.init() / SFX.resume() / SFX.setMuted() / SFX.toggleMute() / SFX.isMuted() /
  * SFX.setVolume() / SFX.play(name, opts) / SFX.startMusic() / SFX.stopMusic() /
- * SFX.setIntensity() / SFX.isMusicPlaying()
+ * SFX.setIntensity() / SFX.isMusicPlaying() / SFX.pauseMusic() / SFX.resumeMusic() / SFX.isMusicPaused()
  *
  * Sounds: swing, hit, crit, kill, hurt, dash, coin, meat, levelup, select,
  * wave, arrow, charge, heal, boss, victory, gameover, boom, parry, click,
@@ -1069,6 +1069,7 @@
       if (!ctx || !musicBus) return;
       if (music.playing) return;
       music.playing = true;
+      music.paused = false;
       music.step = 0;
       music.bar = 0;
       music.intensity = music.pendingIntensity;
@@ -1094,11 +1095,53 @@
         musicBus.gain.linearRampToValueAtTime(0.0001, now + MUSIC_FADE_SEC);
       }
       music.playing = false;
+      music.paused = false;
       if (music.timerId !== null) {
         clearInterval(music.timerId);
         music.timerId = null;
       }
     } catch (e) {}
+  }
+
+  // Pause keeps the loop position but silences the bus and stops scheduling;
+  // resume resyncs the step clock so no backlog of notes plays at once.
+  function pauseMusic() {
+    try {
+      if (!ctx || !music.playing || music.paused) return;
+      music.paused = true;
+      var now = ctx.currentTime;
+      if (musicBus) {
+        var cur = musicBus.gain.value;
+        musicBus.gain.cancelScheduledValues(now);
+        musicBus.gain.setValueAtTime(cur, now);
+        musicBus.gain.linearRampToValueAtTime(0.0001, now + 0.15);
+      }
+      if (music.timerId !== null) {
+        clearInterval(music.timerId);
+        music.timerId = null;
+      }
+    } catch (e) {}
+  }
+
+  function resumeMusic() {
+    try {
+      if (!ctx || !music.playing || !music.paused) return;
+      music.paused = false;
+      var now = ctx.currentTime;
+      music.nextStepTime = now + 0.05;
+      if (musicBus) {
+        var cur = musicBus.gain.value;
+        if (!(cur > 0)) cur = 0.0001;
+        musicBus.gain.cancelScheduledValues(now);
+        musicBus.gain.setValueAtTime(cur, now);
+        musicBus.gain.linearRampToValueAtTime(MUSIC_BUS_LEVEL, now + MUSIC_FADE_SEC);
+      }
+      music.timerId = setInterval(schedulerTick, SCHEDULER_INTERVAL_MS);
+    } catch (e) {}
+  }
+
+  function isMusicPaused() {
+    return !!(music.playing && music.paused);
   }
 
   function setIntensity(x) {
@@ -1126,6 +1169,9 @@
     play: play,
     startMusic: startMusic,
     stopMusic: stopMusic,
+    pauseMusic: pauseMusic,
+    resumeMusic: resumeMusic,
+    isMusicPaused: isMusicPaused,
     setIntensity: setIntensity,
     isMusicPlaying: isMusicPlaying
   };

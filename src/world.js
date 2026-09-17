@@ -14,6 +14,7 @@ TS.World = class World {
     this.analyze();
     this.placeBuildings();
     this.placeDecor();
+    this.buildNav();
     this.placeWaterDecor();
     this.makeClouds();
     this.bake();
@@ -246,6 +247,83 @@ TS.World = class World {
       if (d > bestD) { bestD = d; best = i; }
     }
     return best >= 0 ? best : this.grassTiles[0];
+  }
+  // ---- navigation: blocked grid + Dijkstra flow field toward the player ----
+  buildNav() {
+    const gw = this.gw, gh = this.gh, n = gw * gh;
+    const b = this.blocked = new Uint8Array(n);
+    for (let i = 0; i < n; i++) b[i] = this.tiles[i] ? 0 : 1;
+    for (let k = 0; k < this.rects.length; k++) {
+      const q = this.rects[k];
+      const c0 = Math.floor(q.x0 / TILE), c1 = Math.floor((q.x0 + q.w - 1) / TILE), r0 = Math.floor(q.y0 / TILE), r1 = Math.floor((q.y0 + q.h - 1) / TILE);
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (c >= 0 && r >= 0 && c < gw && r < gh) b[r * gw + c] = 1;
+    }
+    for (let k = 0; k < this.obstacles.length; k++) { const o = this.obstacles[k]; if (o.r >= 14) b[Math.floor(o.y / TILE) * gw + Math.floor(o.x / TILE)] = 1; }
+    this.dist = new Float32Array(n); this.flowX = new Float32Array(n); this.flowY = new Float32Array(n);
+    this.hi = new Int32Array(n * 8); this.hk = new Float32Array(n * 8); this.flowTile = -1;
+  }
+  // Recomputes only when the player changes tile. ~1.5k tiles, well under a millisecond.
+  computeFlow(px, py) {
+    const gw = this.gw, gh = this.gh, dist = this.dist, blocked = this.blocked, hi = this.hi, hk = this.hk;
+    const sc = clamp(Math.floor(px / TILE), 0, gw - 1), sr = clamp(Math.floor(py / TILE), 0, gh - 1), start = sr * gw + sc;
+    if (start === this.flowTile) return;
+    this.flowTile = start;
+    dist.fill(1e9); dist[start] = 0;
+    let hn = 0;
+    const push = (i, k) => { let j = hn++; hi[j] = i; hk[j] = k; while (j > 0) { const p = (j - 1) >> 1; if (hk[p] <= hk[j]) break; const ti = hi[p], tk = hk[p]; hi[p] = hi[j]; hk[p] = hk[j]; hi[j] = ti; hk[j] = tk; j = p; } };
+    const pop = () => { const top = hi[0]; hn--; if (hn > 0) { hi[0] = hi[hn]; hk[0] = hk[hn]; let j = 0; for (;;) { const l = 2 * j + 1, r = l + 1; let m = j; if (l < hn && hk[l] < hk[m]) m = l; if (r < hn && hk[r] < hk[m]) m = r; if (m === j) break; const ti = hi[m], tk = hk[m]; hi[m] = hi[j]; hk[m] = hk[j]; hi[j] = ti; hk[j] = tk; j = m; } } return top; };
+    push(start, 0);
+    while (hn > 0) {
+      const k = hk[0], i = pop();
+      if (k > dist[i]) continue;
+      const c = i % gw, r = (i / gw) | 0;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const nc = c + dc, nr = r + dr; if (nc < 0 || nr < 0 || nc >= gw || nr >= gh) continue;
+        const ni = nr * gw + nc; if (blocked[ni]) continue;
+        if (dr && dc && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue; // no corner cutting
+        const nd = k + (dr && dc ? 1.41421 : 1);
+        if (nd < dist[ni]) { dist[ni] = nd; push(ni, nd); }
+      }
+    }
+    const fx = this.flowX, fy = this.flowY;
+    for (let i = 0; i < dist.length; i++) {
+      if (dist[i] >= 1e9) { fx[i] = 0; fy[i] = 0; continue; }
+      const c = i % gw, r = (i / gw) | 0; let best = dist[i], bx = 0, by = 0;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const nc = c + dc, nr = r + dr; if (nc < 0 || nr < 0 || nc >= gw || nr >= gh) continue;
+        const ni = nr * gw + nc; if (blocked[ni] && ni !== start) continue;
+        if (dr && dc && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
+        if (dist[ni] < best) { best = dist[ni]; bx = dc; by = dr; }
+      }
+      const l = Math.sqrt(bx * bx + by * by) || 1; fx[i] = bx / l; fy[i] = by / l;
+    }
+  }
+  // Writes the flow direction at (x,y) into out.ux/out.uy; false when unknown or at the goal.
+  flowAt(x, y, out) {
+    const c = Math.floor(x / TILE), r = Math.floor(y / TILE);
+    if (c < 0 || r < 0 || c >= this.gw || r >= this.gh) return false;
+    const i = r * this.gw + c; if (this.dist[i] >= 1e9) return false;
+    out.ux = this.flowX[i]; out.uy = this.flowY[i];
+    return out.ux !== 0 || out.uy !== 0;
+  }
+  // Straight-line visibility across the blocked grid (walls, water, trunks).
+  los(x0, y0, x1, y1) {
+    const dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy), steps = Math.ceil(len / 24);
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps, c = Math.floor((x0 + dx * t) / TILE), r = Math.floor((y0 + dy * t) / TILE);
+      if (c < 0 || r < 0 || c >= this.gw || r >= this.gh || this.blocked[r * this.gw + c]) return false;
+    }
+    return true;
+  }
+  // Does an arrow whose ground point is (x,y) hit a building wall or a tree trunk / boulder?
+  blocksArrow(x, y) {
+    const rects = this.rects;
+    for (let i = 0; i < rects.length; i++) { const q = rects[i]; if (x > q.x0 && x < q.x0 + q.w && y > q.y0 - 50 && y < q.y0 + q.h) return true; }
+    const obs = this.obstacles;
+    for (let i = 0; i < obs.length; i++) { const o = obs[i]; if (o.r < 14) continue; const dx = x - o.x, dy = y - o.y, rr = o.r + 4; if (dx * dx + dy * dy < rr * rr) return true; }
+    return false;
   }
   // ---- collision --------------------------------------------------------
   resolveRect(e, rx, ry, rw, rh) {

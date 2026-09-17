@@ -34,7 +34,7 @@ TS.buildSprites = function () {
 const ETYPES = {
   pawn:    { hp: 28,  speed: 150, dmg: 7,  r: 14, xp: 3,  score: 10, range: 46,  windup: 0.32, recover: 0.4,  cd: 1.0, kbRes: 0,    interrupt: 2 },
   warrior: { hp: 90,  speed: 108, dmg: 12, r: 18, xp: 8,  score: 30, range: 76,  windup: 0.5,  recover: 0.55, cd: 1.5, kbRes: 0.3,  interrupt: 1 },
-  archer:  { hp: 45,  speed: 125, dmg: 9, r: 14, xp: 6,  score: 25, keepMin: 230, keepMax: 420, shootRange: 480, shootT: 0.55, cd: 2.4, kbRes: 0, interrupt: 2 },
+  archer:  { hp: 45,  speed: 125, dmg: 8, r: 14, xp: 6,  score: 25, keepMin: 230, keepMax: 420, shootRange: 480, shootT: 0.55, cd: 2.8, kbRes: 0, interrupt: 2 },
   lancer:  { hp: 180, speed: 82,  dmg: 22, r: 22, xp: 20, score: 60, chargeRange: 440, telegraph: 0.7, chargeSpeed: 720, chargeT: 0.5, stagger: 0.9, cd: 3.2, pokeRange: 100, pokeDmg: 12, pokeWind: 0.45, pokeCd: 1.8, kbRes: 0.75, interrupt: 0 },
   monk:    { hp: 60,  speed: 100, dmg: 0,  r: 15, xp: 10, score: 40, keepMin: 200, keepMax: 330, healRange: 240, healT: 0.9, healAmt: 0.25, cd: 3.0, kbRes: 0, interrupt: 2 },
 };
@@ -67,7 +67,7 @@ class Player {
     this.invT = 0; this.hurtT = 0; this.moving = false; this.runDust = 0; this.hitsThisSwing = 0; this.reviveT = 0;
     this.anim.restart(TS.SPR.blue.warrior.idle, 8, true);
   }
-  xpFor(level) { return Math.round(14 + level * 7 + level * level * 1.5); }
+  xpFor(level) { return Math.round(16 + level * 8 + level * level * 2.2); }
   recalc() {
     const u = this.upg;
     this.dmg = 15 * (1 + 0.25 * u.edge);
@@ -75,9 +75,9 @@ class Player {
     this.reach = 88 * (1 + 0.15 * u.arc); this.half = 1.15 + 0.2 * u.arc;
     this.kb = 260 * (1 + 0.4 * u.heavy); this.stunBonus = 0.12 * u.heavy;
     this.speed = 195 * (1 + 0.12 * u.fleet);
-    const oldMax = this.maxHp || 120; this.maxHp = 120 + 30 * u.iron; if (this.hp) this.hp = Math.min(this.maxHp, this.hp + (this.maxHp - oldMax));
+    const oldMax = this.maxHp || 120; this.maxHp = 120 + 25 * u.iron; if (this.hp) this.hp = Math.min(this.maxHp, this.hp + (this.maxHp - oldMax));
     this.dashCdMax = 1.6 * Math.pow(0.75, u.dashm); this.dashDist = 150 * Math.pow(1.25, u.dashm);
-    this.crit = 0.05 + 0.1 * u.lucky; this.lifesteal = 2 * u.vamp; this.magnet = 130 * (1 + 0.4 * u.gold); this.goldMult = 1 + 0.5 * u.gold;
+    this.crit = 0.05 + 0.1 * u.lucky; this.lifesteal = 1 * u.vamp; this.magnet = 130 * (1 + 0.4 * u.gold); this.goldMult = 1 + 0.5 * u.gold;
   }
   adrenaline() { return this.upg.adren && this.hp < this.maxHp * 0.35 ? 1.3 : 1; }
   heal(n, g) { const before = this.hp; this.hp = Math.min(this.maxHp, this.hp + n); const got = Math.round(this.hp - before); if (got > 0 && g) g.fx.text(this.x, this.y - 70, '+' + got, '#7CFC8A', 18); }
@@ -144,17 +144,21 @@ class Player {
     let dmg = this.dmg * (this.combo ? 1.25 : 1) * (this.whirling ? 1.5 : 1) * this.adrenaline();
     const ox = this.x, oy = this.y - 6, a = this.swingA;
     g.fx.wedge(ox, oy, a, half, reach, '#ffffff', this.whirling);
-    let hits = 0;
+    let hits = 0, anyCrit = false; const kills0 = g.kills;
     const E = g.enemies;
     for (let i = 0; i < E.active; i++) {
       const e = E.items[i]; if (!e.alive || e.state === 'spawn') continue;
       const dx = e.x - ox, dy = e.y - oy; const d = Math.sqrt(dx * dx + dy * dy);
       if (d > reach + e.r) continue;
       if (half < PI && d > 22 && Math.abs(wrapAngle(Math.atan2(dy, dx) - a)) > half) continue;
-      const crit = Math.random() < this.crit;
-      e.takeHit(dmg * (crit ? 2 : 1), ox, oy, this.kb, crit, this.stunBonus, g);
+      const crit = Math.random() < this.crit; if (crit) anyCrit = true;
+      e.takeHit(dmg * (crit ? 2 : 1), ox, oy, this.kb, crit, this.stunBonus, g, true);
       hits++;
     }
+    // one impact sound per swing, weighted by how much it connected, instead of one per enemy
+    const kills = g.kills - kills0;
+    if (hits > 0) g.sfxAt(anyCrit ? 'crit' : 'hit', ox, oy, { pitch: 1.05 - Math.min(0.3, hits * 0.03), vol: Math.min(1, 0.75 + hits * 0.05) });
+    if (kills > 0) g.sfxAt('kill', ox, oy, { pitch: 1 - Math.min(0.35, (kills - 1) * 0.08), vol: Math.min(1, 0.8 + kills * 0.05) });
     const SH = g.sheep;
     for (let i = 0; i < SH.active; i++) {
       const s = SH.items[i]; if (!s.alive) continue;
@@ -206,21 +210,22 @@ class Enemy {
     this.x = x; this.y = y; this.vx = 0; this.vy = 0; this.kbx = 0; this.kby = 0;
     this.scale = boss ? 1.5 : elite ? 1.15 : 1;
     this.r = cfg.r * this.scale;
-    const hpMul = g.hpMult * (boss ? 12 : elite ? 2.6 : 1);
+    const hpMul = g.hpMult * (boss ? 20 : elite ? 2.6 : 1);
     this.maxHp = Math.round(cfg.hp * hpMul); this.hp = this.maxHp;
     this.dmg = cfg.dmg * g.dmgMult * (boss ? 1.4 : elite ? 1.3 : 1);
-    this.speed = cfg.speed * (0.9 + Math.random() * 0.2) * (boss ? 1.1 : 1);
+    this.speed = cfg.speed * (0.9 + Math.random() * 0.2) * (boss ? 1.2 : 1);
     this.alive = true; this.state = 'spawn'; this.st = 0.5; this.cd = 0.6 + Math.random() * 0.8; this.cd2 = 1; this.flash = 0; this.stun = 0; this.hpBarT = 0;
     this.facing = x > g.player.x ? -1 : 1; this.aimA = 0; this.dx = 1; this.dy = 0; this.dirKey = 'right'; this.dirFlip = false;
-    this.phase = Math.random() * TAU; this.shot = false; this.chargeHit = false; this.chain = 0; this.healTarget = null; this.healTid = 0; this.scanT = 0;
+    this.phase = Math.random() * TAU; this.shot = false; this.chargeHit = false; this.chain = 0; this.healTarget = null; this.healTid = 0; this.scanT = 0; this.ux = 0; this.uy = 0; this.hasLos = true;
     this.anim.restart(this.spr.idle, 8, true);
     this.xpValue = Math.round(cfg.xp * (boss ? 10 : elite ? 3 : 1)); this.scoreValue = cfg.score * (boss ? 25 : elite ? 3 : 1);
   }
   // movement helpers ------------------------------------------------------
-  keepBand(dx, dy, d, min, max, dt) { // archers & monks: stay inside a distance band
+  keepBand(dx, dy, d, min, max, W, P) { // archers & monks: stay inside a distance band with a clear line to the player
     let mx = 0, my = 0;
-    if (d < min) { mx = -dx / d; my = -dy / d; }
-    else if (d > max) { mx = dx / d; my = dy / d; }
+    this.hasLos = d <= max + 40 ? W.los(this.x, this.y, P.x, P.y) : false;
+    if (d > max || !this.hasLos) { if (W.flowAt(this.x, this.y, this)) { mx = this.ux; my = this.uy; } else { mx = dx / d; my = dy / d; } }
+    else if (d < min) { mx = -dx / d; my = -dy / d; }
     else { const s = Math.sin(this.phase + this.st * 1.3) * 0.5; mx = -dy / d * s; my = dx / d * s; }
     this.vx = mx * this.speed; this.vy = my * this.speed;
   }
@@ -238,9 +243,11 @@ class Enemy {
         this.st += dt;
         const t = this.type;
         if (this.stun <= 0 && P.alive) {
-          if (t === 'archer' || t === 'monk') this.keepBand(dx, dy, d, cfg.keepMin, cfg.keepMax, dt);
+          if (t === 'archer' || t === 'monk') this.keepBand(dx, dy, d, cfg.keepMin, cfg.keepMax, W, P);
           else {
             let ux = dx / d, uy = dy / d;
+            // route around buildings, trunks and water unless the player is close and in plain sight
+            if (d > 100 && (d > 420 || !W.los(this.x, this.y, P.x, P.y)) && W.flowAt(this.x, this.y, this)) { ux = this.ux; uy = this.uy; }
             if (t === 'pawn') { const j = Math.sin(g.time * 3.1 + this.phase) * 0.45; ux += -uy * j; uy += ux * j; }
             const stopD = t === 'lancer' ? 60 : cfg.range * 0.8;
             if (d > stopD) { this.vx = ux * this.speed; this.vy = uy * this.speed; }
@@ -250,10 +257,10 @@ class Enemy {
         if (P.alive && this.stun <= 0) {
           if ((t === 'pawn' || t === 'warrior') && this.cd <= 0 && d < cfg.range + P.r) {
             this.state = 'windup'; this.st = cfg.windup; this.aimA = Math.atan2(dy, dx); this.anim.restart(this.spr.attack, 1, false); this.anim.frame = 0;
-          } else if (t === 'archer' && this.cd <= 0 && d < cfg.shootRange && d > 90) {
+          } else if (t === 'archer' && this.cd <= 0 && d < cfg.shootRange && d > 90 && this.hasLos) {
             this.state = 'shoot'; this.st = cfg.shootT; this.shot = false; this.anim.restart(this.spr.attack, 1, false);
           } else if (t === 'lancer') {
-            if (this.cd <= 0 && d < cfg.chargeRange * this.scale && d > 70) this.startTelegraph(dx, dy, d, g, this.boss ? 3 : 1);
+            if (this.cd <= 0 && d < cfg.chargeRange * this.scale && d > 70 && W.los(this.x, this.y, P.x, P.y)) this.startTelegraph(dx, dy, d, g, this.boss ? 4 : 1, this.boss ? 0.5 : undefined);
             else if (this.cd2 <= 0 && d < cfg.pokeRange * this.scale + P.r) {
               this.state = 'poke'; this.st = cfg.pokeWind; this.aimA = Math.atan2(dy, dx); this.dirKey = lancerDir(this, dx, dy); this.anim.restart(this.spr.attack[this.dirKey], 1, false);
             }
@@ -289,7 +296,7 @@ class Enemy {
         if (!this.shot && p >= 0.62) {
           this.shot = true;
           const lead = 0.28; const tx = P.x + P.vx * lead - this.x, ty = P.y - 20 + P.vy * lead - (this.y - 26);
-          const l = Math.max(1, Math.sqrt(tx * tx + ty * ty)), sp = 470;
+          const l = Math.max(1, Math.sqrt(tx * tx + ty * ty)), sp = 440;
           g.spawnArrow(this.x + this.facing * 12, this.y - 26, tx / l * sp, ty / l * sp, this.dmg);
           g.sfxAt('arrow', this.x, this.y);
         }
@@ -317,7 +324,7 @@ class Enemy {
         if (this.st <= 0 || blocked) {
           this.chain--;
           if (this.chain > 0 && P.alive) { const ndx = P.x - this.x, ndy = P.y - this.y; this.startTelegraph(ndx, ndy, Math.max(1, Math.sqrt(ndx * ndx + ndy * ndy)), g, this.chain, 0.42); }
-          else { this.state = 'stagger'; this.st = cfg.stagger; this.anim.restart(this.spr.idle, 12, true); if (blocked) { g.fx.shake(0.3); g.sfxAt('boom', this.x, this.y, { vol: 0.5, pitch: 1.4 }); } }
+          else { this.state = 'stagger'; this.st = this.boss ? 0.6 : cfg.stagger; this.anim.restart(this.spr.idle, 12, true); if (blocked) { g.fx.shake(0.3); g.sfxAt('boom', this.x, this.y, { vol: 0.5, pitch: 1.4 }); } }
         }
         return; // collide already applied
       }
@@ -371,7 +378,7 @@ class Enemy {
     }
     this.healTarget = best; this.healTid = best ? best.id : 0;
   }
-  takeHit(dmg, ax, ay, kb, crit, stunBonus, g) {
+  takeHit(dmg, ax, ay, kb, crit, stunBonus, g, quiet) {
     if (!this.alive) return;
     if (this.state === 'stagger') { dmg *= 2; crit = true; }
     dmg = Math.round(dmg);
@@ -384,11 +391,11 @@ class Enemy {
     else if (it === 1 && this.state === 'windup' && this.st > this.cfg.windup * 0.35) { this.state = 'chase'; this.cd = Math.max(this.cd, 0.5); }
     g.fx.text(this.x, this.y - 58 * this.scale, String(dmg), crit ? '#ffb347' : '#ffffff', crit ? 26 : 18);
     g.fx.spark(this.x, this.y - 28 * this.scale, crit ? 14 : 6, crit ? '#ffd166' : '#ffffff', crit ? 260 : 180, 3);
-    g.sfxAt(crit ? 'crit' : 'hit', this.x, this.y);
+    if (!quiet) g.sfxAt(crit ? 'crit' : 'hit', this.x, this.y);
     if (crit) g.fx.fx(TS.SPR.explosion1, this.x, this.y - 30 * this.scale, { fps: 24, scale: 0.7 });
-    if (this.hp <= 0) this.die(g);
+    if (this.hp <= 0) this.die(g, quiet);
   }
-  die(g) { this.alive = false; g.onEnemyKilled(this); }
+  die(g, quiet) { this.alive = false; g.onEnemyKilled(this, quiet); }
   drawShadow(R) { const s = TS.SPR.shadow, w = this.r * 3.2, h = this.r * 1.6; R.imageWorld(s.img, s.u[0], s.u[1], s.u[2], s.u[3], this.x - w / 2, this.y - h / 2 + 2, w, h, 0.7); }
   drawTelegraph(R) {
     if (this.state !== 'telegraph') return;
@@ -426,6 +433,7 @@ class Arrow {
   init(x, y, vx, vy, dmg) { this.alive = true; this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.dmg = dmg; this.life = 1.5; this.a = Math.atan2(vy, vx); }
   update(dt, g) {
     this.x += this.vx * dt; this.y += this.vy * dt; this.life -= dt;
+    if (g.world.blocksArrow(this.x, this.y + 22)) { this.alive = false; g.fx.fx(TS.SPR.dust1, this.x, this.y + 8, { fps: 22, alpha: 0.8 }); return; }
     const P = g.player; const dx = P.x - this.x, dy = (P.y - 22) - this.y; const rr = P.r + 8;
     if (P.alive && dx * dx + dy * dy < rr * rr) {
       if (P.takeDamage(this.dmg, this.x - this.vx, this.y - this.vy, g)) { this.alive = false; return; }
