@@ -233,6 +233,7 @@ TS.UI = class UI {
     const rowH = 15 * u, fSize = 9.5 * u;
     const kbRows = [['WASD / Arrows', 'Move'], ['Mouse', 'Aim'], ['Click / Space', 'Attack (hold)'], ['Shift / R-click', 'Dash'], ['Esc / P', 'Pause'], ['M  ·  F', 'Mute  ·  FPS']];
     const touchLines = ['Move: drag left half', 'Attack: hold right half', 'Dash: button', 'Pause: button, top-right'];
+    if (touch && g.needsHomeScreen()) touchLines.push('Full screen: Share → Add to Home Screen');
     const rowCount = touch ? touchLines.length : kbRows.length;
     const ph = 30 * u + rowH * (rowCount + 3);
     this.panel(px, py, pw, ph);

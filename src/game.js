@@ -144,10 +144,33 @@ TS.Game = class Game {
     }
     return best;
   }
-  // Phones only, and only on the tap that starts a run: fullscreen hides the browser chrome.
+  // Touch devices, on the tap that starts a run: fullscreen hides the browser chrome where the
+  // browser allows it (Android, iPad). iPhone Safari has no element fullscreen at all; there the
+  // start screen points at Share > Add to Home Screen, which launches with no browser UI.
+  static fullscreenAvailable() { return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled); }
+  static standalone() {
+    if (navigator.standalone) return true;
+    try { return window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches; } catch (e) { return false; }
+  }
+  // True when the only route to full screen is installing to the home screen (iPhone Safari).
+  needsHomeScreen() { return this.input.touch && !TS.Game.fullscreenAvailable() && !TS.Game.standalone(); }
   goFullscreen() {
-    if (!this.input.touch || !document.fullscreenEnabled || document.fullscreenElement) return;
-    try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (e) { /* not allowed */ }
+    if (!this.input.touch || !TS.Game.fullscreenAvailable()) return;
+    if (document.fullscreenElement || document.webkitFullscreenElement) return;
+    // WebKit only honours the request from inside the gesture's own event handler, so the call
+    // happens in Input's gesture-end callback (main.js): usually the PLAY tap's own touchend, which
+    // normally lands after this frame; otherwise the first in-game touch.
+    this.wantFullscreen = true;
+  }
+  requestFullscreenNow() {
+    this.wantFullscreen = false;
+    const el = document.documentElement;
+    // Best effort after fullscreen: Android honours a landscape lock, everything else rejects it.
+    const lock = () => { try { const o = screen.orientation; if (o && o.lock) o.lock('landscape').catch(() => {}); } catch (e) { /* unsupported */ } };
+    try {
+      const p = el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen ? el.webkitRequestFullscreen() : null;
+      if (p && p.then) p.then(lock, () => {}); else lock();
+    } catch (e) { /* not allowed */ }
   }
   // ---- fixed step ------------------------------------------------------
   step(dt) {

@@ -29,6 +29,7 @@
     const ui = new TS.UI(R, input);
     const game = new TS.Game(R, input, ui);
     input.anyGesture = () => { SFX.init(); SFX.resume(); };
+    input.gestureEnd = () => { if (game.wantFullscreen) game.requestFullscreenNow(); };
     const params = new URLSearchParams(location.search);
     if (params.get('fps') === '1') game.showFps = true;
     dbg.ready = true; dbg.stats = game.stats; dbg.game = game; dbg.touch = game.touch;

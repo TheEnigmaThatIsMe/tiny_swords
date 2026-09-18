@@ -37,6 +37,8 @@ npm run dev -- --host=0.0.0.0   # or: HOST=0.0.0.0 npm run dev
 
 The server prints its LAN address(es) at startup; default behaviour (127.0.0.1 only) is unchanged.
 
+On Android (Chrome) and iPad, tapping PLAY asks the browser for fullscreen and a landscape lock. Safari on iPhone has no fullscreen for pages at all, so the game cannot hide its tab bar there; the start screen instead points at Share → Add to Home Screen, and the home-screen copy launches without any browser UI (a `manifest.webmanifest` plus `assets/icon-*.png`, built by `tools/build_icon.py`, cover the icon and fullscreen/landscape settings).
+
 ## Deploy to GitHub Pages
 
 The game is plain static files with relative paths, so it runs unchanged from a Pages subpath such as `https://<user>.github.io/tiny_swords/`. A `.nojekyll` file is checked in so Pages serves the asset folder verbatim.
@@ -96,7 +98,7 @@ Measured in headless Chrome (software rendering) by the play-test driver with up
 - Balance has had one human play-through: the first cut was won comfortably (level 23, score 197,300), so the second pass fixed enemy pathing (which had been silently easing the game by stranding enemies behind buildings), steepened late HP and damage scaling, let the alive cap grow from 90 to 140, toughened the Warlord, and cut lifesteal and the combo score multiplier. Expect it to be meaningfully harder now; the knobs are `TS.CFG` and `SFX_GATE` in src/game.js, `ETYPES` and `xpFor` in src/entities.js.
 - All sound is synthesized and only checked with a mocked AudioContext plus one human listen; M mutes.
 - Keyboard-only play aims along the movement direction, so standing still attacks in the last direction faced.
-- Touch is supported (on-screen joystick, attack/dash/pause buttons, auto-aim); no gamepad. Automated coverage is Chrome's headless touch emulation via `--mobile`; a physical phone, reached over the same-Wi-Fi LAN server above, is on the developer to spot-check.
+- Touch is supported (on-screen joystick, attack/dash/pause buttons, auto-aim); no gamepad. Input uses Touch Events wherever the browser has them (iOS Safari's Pointer Events implementation drops and mis-captures contacts) and Pointer Events elsewhere. Automated coverage is Chrome's headless touch emulation via `--mobile`; a physical phone, reached over the same-Wi-Fi LAN server above, is on the developer to spot-check.
 - Depth sorting is by feet position, so units standing behind a tall tree trunk are hidden by it. Decorations use circular collision, bushes have none.
 - Verified in Chrome (headed and headless). Firefox and Safari should work but were not part of the automated test.
 - The play-test driver depends on Google Chrome at its standard macOS path (override with `--chrome=PATH` or `CHROME=`).

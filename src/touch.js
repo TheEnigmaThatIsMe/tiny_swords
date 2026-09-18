@@ -33,7 +33,9 @@ TS.Touch = class Touch {
     const I = this.I, R = this.R, d = R.dpr;
     // A touch keeps its role for its whole life; drop roles whose touch has ended.
     if (this.roles.size) { for (const id of Array.from(this.roles.keys())) if (!I.touches.has(id)) this.roles.delete(id); }
-    if (this.stickId >= 0 && !I.touches.has(this.stickId)) this.stickId = -1;
+    // The stick lets go the moment its touch lifts (a released touch lingers in I.touches for one
+    // frame), so a finger that lifts and lands again inside one frame is not left roleless.
+    if (this.stickId >= 0) { const st = I.touches.get(this.stickId); if (!st || st.up) this.stickId = -1; }
     const playing = game.state === 'playing';
     const s = this.dashC(), p = this.pauseHitR();
     for (let n = 0; n < I.newTouches.length; n++) {
