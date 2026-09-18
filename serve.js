@@ -2,11 +2,35 @@
 
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const ROOT = __dirname;
 const PORT = parseInt(process.env.PORT, 10) || 8080;
-const HOST = process.env.HOST || '127.0.0.1';
+
+// --host=0.0.0.0 (or HOST=0.0.0.0 npm run dev) binds every interface so the game can be opened
+// from a phone on the same Wi-Fi; default behaviour (127.0.0.1 only) is unchanged.
+function hostArg() {
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--host') return argv[i + 1];
+    if (a.startsWith('--host=')) return a.slice('--host='.length);
+  }
+  return null;
+}
+const HOST = hostArg() || process.env.HOST || '127.0.0.1';
+
+function lanAddresses() {
+  const out = [];
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const info of ifaces[name] || []) {
+      if (info.family === 'IPv4' && !info.internal) out.push(info.address);
+    }
+  }
+  return out;
+}
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -145,6 +169,15 @@ server.on('error', (err) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Tiny Swords dev server -> http://${HOST}:${PORT}/`);
+  if (HOST === '0.0.0.0' || HOST === '::') {
+    const lan = lanAddresses();
+    if (lan.length) {
+      console.log('On your phone (same Wi-Fi):');
+      for (const ip of lan) console.log(`  http://${ip}:${PORT}/`);
+    } else {
+      console.log('No LAN-facing IPv4 address found.');
+    }
+  }
   console.log('Press Ctrl+C to stop.');
 });
 

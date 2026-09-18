@@ -29,6 +29,14 @@ python3 tools/build_atlas.py # rebuild assets/atlas-0.png + src/atlas-data.js fr
 
 URL flags: `?fps=1` shows the FPS counter from the start, `?bot=1` lets the built-in bot play (also disables auto-pause; used by the play-test).
 
+To play on a phone on the same Wi-Fi, serve on every interface and open the printed LAN URL:
+
+```
+npm run dev -- --host=0.0.0.0   # or: HOST=0.0.0.0 npm run dev
+```
+
+The server prints its LAN address(es) at startup; default behaviour (127.0.0.1 only) is unchanged.
+
 ## Deploy to GitHub Pages
 
 The game is plain static files with relative paths, so it runs unchanged from a Pages subpath such as `https://<user>.github.io/tiny_swords/`. A `.nojekyll` file is checked in so Pages serves the asset folder verbatim.
@@ -40,18 +48,18 @@ The game is plain static files with relative paths, so it runs unchanged from a 
 
 ## Controls
 
-| Action | Keys |
-| --- | --- |
-| Move | WASD or arrow keys |
-| Aim | Mouse (keyboard-only: aims along your movement direction) |
-| Attack / chain | Left click or Space (hold to keep chaining) |
-| Dash (invulnerable, passes through enemies) | Shift or right click |
-| Pick an upgrade | 1 / 2 / 3 or click a card |
-| Pause / resume | Esc or P (Q on the pause screen quits to the title); music pauses with the game |
-| Restart after a run | R or Enter |
-| Mute / FPS counter | M / F |
+| Action | Keys | Touch |
+| --- | --- | --- |
+| Move | WASD or arrow keys | Drag on the left half (floating joystick) |
+| Aim | Mouse (keyboard-only: aims along your movement direction) | Auto-aims at the nearest enemy |
+| Attack / chain | Left click or Space (hold to keep chaining) | Hold the right half |
+| Dash (invulnerable, passes through enemies) | Shift or right click | Dash button |
+| Pick an upgrade | 1 / 2 / 3 or click a card | Tap a card |
+| Pause / resume | Esc or P (Q on the pause screen quits to the title); music pauses with the game | Pause button (top-right); RESUME / SOUND / QUIT buttons |
+| Restart after a run | R or Enter | PLAY AGAIN / MENU buttons |
+| Mute / FPS counter | M / F | SOUND button on the pause screen |
 
-Controls are also listed on the start screen and the pause screen.
+Controls are also listed on the start screen and the pause screen, with a touch-specific version of both when playing on a phone.
 
 ## Design rationale
 
@@ -81,12 +89,14 @@ Measured in headless Chrome (software rendering) by the play-test driver with up
 
 `tools/playtest.mjs` launches headless Chrome through the DevTools Protocol using only Node's built-in `fetch` and `WebSocket`, presses Enter with a real key event, turns on the in-game bot, runs a full ten-minute run at 6x speed with screenshots each game-minute, verifies the R-key restart, and fails on any exception, console error or failed request. On the current tuning the bot, which never learns to kite and only dodges the most obvious threats, dies around minute four, with zero errors logged across the run and restart; a player who dashes through arrows, hunts Archers and Monks, and punishes Lancer staggers goes much further. A second scenario script exercises pause, level-up, boss and victory with real key and mouse events, including a click-through attempt on a freshly opened upgrade popup (ignored for its first 0.45 s) and the music pause flag on the pause and level-up screens. Screenshots land in `playtest-shots/` after `npm test`.
 
+`--mobile[=landscape|portrait]` emulates a touch phone (844x390 CSS px @2x landscape by default, or 390x844 portrait) instead of desktop input: it touch-taps PLAY, drags the on-screen joystick and holds the attack zone (failing if the player doesn't move or `ctrl.attack` doesn't fire), then hands off to the bot for the timed run, screenshotting the pause and level-up states along the way. Shots land in `playtest-shots/mobile-landscape/` or `mobile-portrait/`. Run `node tools/playtest.mjs --help` for the full flag list.
+
 ## Known limitations
 
 - Balance has had one human play-through: the first cut was won comfortably (level 23, score 197,300), so the second pass fixed enemy pathing (which had been silently easing the game by stranding enemies behind buildings), steepened late HP and damage scaling, let the alive cap grow from 90 to 140, toughened the Warlord, and cut lifesteal and the combo score multiplier. Expect it to be meaningfully harder now; the knobs are `TS.CFG` and `SFX_GATE` in src/game.js, `ETYPES` and `xpFor` in src/entities.js.
 - All sound is synthesized and only checked with a mocked AudioContext plus one human listen; M mutes.
 - Keyboard-only play aims along the movement direction, so standing still attacks in the last direction faced.
-- No gamepad or touch support; phones are not a target.
+- Touch is supported (on-screen joystick, attack/dash/pause buttons, auto-aim); no gamepad. Automated coverage is Chrome's headless touch emulation via `--mobile`; a physical phone, reached over the same-Wi-Fi LAN server above, is on the developer to spot-check.
 - Depth sorting is by feet position, so units standing behind a tall tree trunk are hidden by it. Decorations use circular collision, bushes have none.
 - Verified in Chrome (headed and headless). Firefox and Safari should work but were not part of the automated test.
 - The play-test driver depends on Google Chrome at its standard macOS path (override with `--chrome=PATH` or `CHROME=`).

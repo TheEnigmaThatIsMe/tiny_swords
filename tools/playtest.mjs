@@ -40,15 +40,25 @@ function printUsage() {
 Options:
   --url=URL          Target URL to test (skips spawning the dev server)
   --file             Open file://<repo>/index.html directly (skips the dev server)
-  --query=STRING     Query string appended to the URL (default: bot=1, which disables auto-pause)
+  --query=STRING     Query string appended to the URL (default: bot=1 on desktop,
+                     which disables auto-pause; empty in --mobile mode so the bot
+                     doesn't short-circuit touch input)
   --speed=N          Simulation speed multiplier passed to __game.setSpeed (default: 6)
   --minutes=N        Max game minutes to play before stopping (default: 10)
-  --shots=DIR        Screenshot output directory (default: <repo>/playtest-shots)
+  --shots=DIR        Screenshot output directory (default: <repo>/playtest-shots,
+                     or <repo>/playtest-shots/mobile-<orientation> in --mobile mode)
   --shot-every=N     Take a screenshot every N game-seconds (default: 60)
   --timeout=N        Max wall-clock seconds before giving up (default: 600)
   --chrome=PATH      Path to the Chrome binary (default: $CHROME, else the
                      standard macOS install path)
   --repo=DIR         Repo root (default: parent directory of this script)
+  --mobile[=landscape|portrait]
+                     Emulate a touch phone instead of desktop mouse/keyboard input
+                     (default orientation: landscape, 844x390 CSS px @2x; portrait
+                     is 390x844 @2x). Touch-drives the PLAY button, the on-screen
+                     joystick and the attack button before handing off to the bot
+                     for the timed run, and screenshots the pause and level-up
+                     states along the way.
   --help             Show this help and exit
 
 Exit codes:
@@ -69,13 +79,23 @@ const minutes = num(args.minutes, 10);
 const shotEvery = num(args['shot-every'], 60);
 const timeoutSec = num(args.timeout, 600);
 
+const mobile = args.mobile !== undefined;
+const mobileOrientation = args.mobile === 'portrait' ? 'portrait' : 'landscape';
+if (mobile && args.mobile !== true && args.mobile !== 'landscape' && args.mobile !== 'portrait') {
+  console.error(`--mobile must be "landscape" or "portrait", got "${args.mobile}"`);
+  process.exit(2);
+}
+const mobileMetrics = mobileOrientation === 'portrait'
+  ? { width: 390, height: 844, deviceScaleFactor: 2, mobile: true }
+  : { width: 844, height: 390, deviceScaleFactor: 2, mobile: true };
+
 const toolsDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultRepoRoot = path.dirname(toolsDir);
 const repoRoot = args.repo ? path.resolve(String(args.repo)) : defaultRepoRoot;
 
 const shotsDir = args.shots
   ? path.resolve(String(args.shots))
-  : path.join(repoRoot, 'playtest-shots');
+  : path.join(repoRoot, 'playtest-shots', ...(mobile ? [`mobile-${mobileOrientation}`] : []));
 
 // ---------------------------------------------------------------------------
 // Small utilities
@@ -346,6 +366,21 @@ async function pressKey(key, code, vk) {
   await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
 }
 
+// Touch points are CSS px (not device px) per the CDP Input domain.
+async function touchStart(x, y) {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+}
+async function touchMove(x, y) {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] });
+}
+async function touchEnd() {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+async function tap(x, y) {
+  await touchStart(x, y);
+  await touchEnd();
+}
+
 function fmtRemote(o) {
   if (o == null) return String(o);
   if (o.type === 'string') return o.value;
@@ -393,7 +428,9 @@ async function main() {
         throw e;
       }
     }
-    const query = args.query === undefined ? 'bot=1' : String(args.query);
+    // In --mobile mode, bot=1 must NOT be the default: the bot short-circuits input handling,
+    // which is exactly what the touch-driven start/joystick/attack checks below need to exercise.
+    const query = args.query !== undefined ? String(args.query) : mobile ? '' : 'bot=1';
     if (query) targetUrl += (targetUrl.includes('?') ? '&' : '?') + query;
     const isFileUrl = targetUrl.startsWith('file://');
 
@@ -469,6 +506,11 @@ async function main() {
     await cdp.send('Log.enable');
     await cdp.send('Network.enable');
 
+    if (mobile) {
+      await cdp.send('Emulation.setDeviceMetricsOverride', mobileMetrics);
+      await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    }
+
     // -- Navigate and wait for the game to report ready ------------------------
     await cdp.send('Page.navigate', { url: targetUrl });
 
@@ -491,9 +533,24 @@ async function main() {
 
     await screenshot('00-start.png');
 
-    // -- Start the game with a real Enter keydown -------------------------------
-    await pressKey('Enter', 'Enter', 13);
-    const started = await pollUntilTrue(() => evalBool('window.__game.state === "playing"'), 2000, 100);
+    // -- Start the game: a real Enter keydown on desktop, a touch tap on PLAY on mobile ---------
+    let started;
+    if (mobile) {
+      const play = await evalJSON('window.__game.game.ui.rects.play');
+      const dpr = (await evalJSON('window.__game.game.R.dpr')) || 2;
+      if (!play) {
+        addError('mobile: window.__game.game.ui.rects.play was not available to tap');
+        started = false;
+      } else {
+        const cx = (play.x + play.w / 2) / dpr, cy = (play.y + play.h / 2) / dpr;
+        await tap(cx, cy);
+        started = await pollUntilTrue(() => evalBool('window.__game.state === "playing"'), 2000, 100);
+        if (!started) addError('mobile: touchStart/touchEnd on the PLAY button did not start the game within 2s');
+      }
+    } else {
+      await pressKey('Enter', 'Enter', 13);
+      started = await pollUntilTrue(() => evalBool('window.__game.state === "playing"'), 2000, 100);
+    }
 
     let finalState = 'menu';
     const lastStats = {
@@ -502,13 +559,37 @@ async function main() {
     const fpsSamples = [];
 
     if (!started) {
-      addError('game did not start on Enter');
+      addError(mobile ? 'game did not start on PLAY tap' : 'game did not start on Enter');
     } else {
       finalState = 'playing';
+
+      if (mobile) {
+        // -- Touch-drive the joystick and attack zone before handing off to the bot ------------
+        const cssW = mobileMetrics.width, cssH = mobileMetrics.height;
+        const x0 = Number(await evalJSON('window.__game.game.player.x')) || 0;
+        const jx = cssW * 0.25, jy = cssH * 0.6;
+        await touchStart(jx, jy);
+        await touchMove(jx + 70, jy);
+        await sleep(800);
+        await touchEnd();
+        const x1 = Number(await evalJSON('window.__game.game.player.x')) || 0;
+        if (!(x1 - x0 > 20)) addError(`mobile: joystick drag did not move the player (dx=${(x1 - x0).toFixed(1)})`);
+
+        const ax = cssW * 0.8, ay = cssH * 0.6;
+        await touchStart(ax, ay);
+        await sleep(100);
+        const attacking = await evalBool('window.__game.game.ctrl.attack === true');
+        if (!attacking) addError('mobile: holding the attack zone did not set ctrl.attack');
+        await touchEnd();
+
+        await screenshot('mobile-playing.png');
+      }
+
       await evalJSON(`(window.__game.setBot(true), window.__game.setSpeed(${speed}), true)`);
 
       // -- Monitoring loop: one tick per wall-clock second ----------------------
       let lastShotBoundary = 0;
+      let mobilePausedShotDone = false, mobileLevelupShotDone = false;
       const loopStart = Date.now();
       for (;;) {
         await sleep(1000);
@@ -526,6 +607,18 @@ async function main() {
         if (boundary > lastShotBoundary) {
           lastShotBoundary = boundary;
           await screenshot(`t${mmssCompact(t)}.png`);
+        }
+
+        if (mobile && !mobileLevelupShotDone && stats.state === 'levelup') {
+          mobileLevelupShotDone = true;
+          await screenshot('mobile-levelup.png');
+        }
+        if (mobile && !mobilePausedShotDone && t >= 30) {
+          mobilePausedShotDone = true;
+          await evalJSON("(window.__game.game.state = 'paused', true)");
+          await sleep(150);
+          await screenshot('mobile-paused.png');
+          await evalJSON("(window.__game.game.state = 'playing', true)");
         }
 
         if (stats.state === 'gameover' || stats.state === 'victory') {
