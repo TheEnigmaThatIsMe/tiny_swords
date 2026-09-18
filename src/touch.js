@@ -100,9 +100,10 @@ TS.Touch = class Touch {
     }
     // --- dash (left of and above attack) ---
     const s = this.dashC();
-    this.disc(s.x, s.y, s.r, '#0b0a14', 0.34, '#eaf6ff', 0.35, 3 * d);
-    const dustS = A.sheet('fx_dust2');
-    R.uiSpriteCentered(dustS, 1, s.x, s.y, this.iconScale(dustS, 1, s.r * 1.4));
+    // Same round button + arrow as the desktop HUD's dash indicator, so the two read as one thing.
+    const btnS = A.sheet('btn_smallblueroundbutton_regular'), arrowS = A.sheet('icon8');
+    R.uiSpriteCentered(btnS, 0, s.x, s.y, this.iconScale(btnS, 0, s.r * 2));
+    R.uiSpriteCentered(arrowS, 0, s.x, s.y, this.iconScale(arrowS, 0, s.r * 1.15));
     const cdMax = P.dashCdMax || 1, cd = clamp((P.dashCd || 0) / cdMax, 0, 1);
     if (cd > 0.001) {
       c.globalAlpha = 0.6; c.fillStyle = '#0b0a14';
@@ -111,11 +112,10 @@ TS.Touch = class Touch {
     }
     // --- attack ---
     const a = this.attackC(), held = this.attack;
-    this.disc(a.x, a.y, a.r, held ? '#2a1e3a' : '#0b0a14', held ? 0.5 : 0.34, '#eaf6ff', held ? 0.55 : 0.35, 3 * d);
-    const swordS = A.sheet('warrior_blue_attack1');
-    c.globalAlpha = held ? 0.7 : 1;
-    R.uiSpriteCentered(swordS, 2, a.x, a.y, this.iconScale(swordS, 2, a.r * 1.3));
-    c.globalAlpha = 1;
+    R.uiSpriteCentered(btnS, 0, a.x, a.y, this.iconScale(btnS, 0, a.r * 2));
+    const swordS = A.sheet('icon5');
+    R.uiSpriteCentered(swordS, 0, a.x, a.y, this.iconScale(swordS, 0, a.r * 1.15));
+    if (held) { c.globalAlpha = 0.35; c.fillStyle = '#0b0a14'; c.beginPath(); c.arc(a.x, a.y, a.r, 0, TAU); c.fill(); c.globalAlpha = 1; }
     // --- pause ---
     const p = this.pauseR();
     R.nine('btn_blue', p.x, p.y, p.w, p.h, d * 0.3);
