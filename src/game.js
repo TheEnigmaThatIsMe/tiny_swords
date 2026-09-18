@@ -29,6 +29,7 @@ const INTRO = { warrior: ['WARRIORS LANDED', 'They wind up before swinging. Step
 TS.Game = class Game {
   constructor(R, input, ui) {
     this.R = R; this.input = input; this.ui = ui; this.fx = new TS.Effects();
+    this.touch = new TS.Touch(input, R);
     this.player = new TS.Player();
     this.enemies = new Pool(() => new TS.Enemy(), 220);
     this.arrows = new Pool(() => new TS.Arrow(), 96);
@@ -95,31 +96,58 @@ TS.Game = class Game {
   }
   // ---- per-frame input → ctrl ------------------------------------------
   pollInput() {
-    const I = this.input, R = this.R, P = this.player, c = this.ctrl;
+    const I = this.input, R = this.R, P = this.player, c = this.ctrl, T = this.touch;
+    T.poll(this);
     if (I.hit('KeyF')) this.showFps = !this.showFps;
     if (I.hit('KeyM')) { SFX.init(); SFX.toggleMute(); SFX.play('click'); }
     if (this.state === 'menu') {
-      if (I.hit('Enter') || I.hit('Space') || this.ui.consumeClick('play')) this.startRun();
+      if (I.hit('Enter') || I.hit('Space') || this.ui.consumeClick('play')) { this.goFullscreen(); this.startRun(); }
     } else if (this.state === 'playing') {
-      if (I.hit('Escape') || I.hit('KeyP')) { this.state = 'paused'; SFX.pauseMusic(); SFX.play('click'); }
+      if (I.hit('Escape') || I.hit('KeyP') || T.pausePressed) { this.state = 'paused'; SFX.pauseMusic(); SFX.play('click'); }
     } else if (this.state === 'paused') {
       if (I.hit('Escape') || I.hit('KeyP') || this.ui.consumeClick('resume')) { this.state = 'playing'; SFX.resumeMusic(); SFX.play('click'); }
-      if (I.hit('KeyQ')) this.toMenu();
+      if (this.ui.consumeClick('sound')) { SFX.init(); SFX.toggleMute(); SFX.play('click'); }
+      if (I.hit('KeyQ') || this.ui.consumeClick('quit')) this.toMenu();
     } else if (this.state === 'levelup') {
       if (this.modalT >= 0.45) { for (let i = 0; i < 3; i++) if (I.hit('Digit' + (i + 1)) || I.hit('Numpad' + (i + 1)) || this.ui.consumeClick('card' + i)) { this.chooseUpgrade(i); break; } }
       else { this.ui.clickedId = null; }
     } else if (this.state === 'gameover' || this.state === 'victory') {
       if (this.modalT < 0.8) this.ui.clickedId = null;
       else if (I.hit('KeyR') || I.hit('Enter') || this.ui.consumeClick('again')) this.startRun();
-      else if (I.hit('Escape')) this.toMenu();
+      else if (I.hit('Escape') || this.ui.consumeClick('menu')) this.toMenu();
     }
-    if (this.bot) return;
-    c.mx = I.axisX(); c.my = I.axisY();
-    if (I.mouseMoved) { c.aimX = this.camX + I.mouseX / R.zoom; c.aimY = this.camY + I.mouseY / R.zoom; }
+    if (this.bot) { T.clearEdges(); return; }
+    if (T.stickActive) { c.mx = T.mx; c.my = T.my; } else { c.mx = I.axisX(); c.my = I.axisY(); }
+    if (I.touch) {
+      // No cursor to aim with: lock on to the nearest enemy, else point where the stick points.
+      const near = this.nearestTarget(220);
+      if (near) { c.aimX = near.x; c.aimY = near.y; }
+      else if (T.stickActive) { c.aimX = P.x + T.mx * 100; c.aimY = P.y - 20 + T.my * 100; }
+      else { const dx = c.mx || P.facing, dy = c.my; c.aimX = P.x + dx * 100; c.aimY = P.y - 20 + dy * 100; }
+    } else if (I.mouseMoved) { c.aimX = this.camX + I.mouseX / R.zoom; c.aimY = this.camY + I.mouseY / R.zoom; }
     else { const dx = c.mx || P.facing, dy = c.my; c.aimX = P.x + dx * 100; c.aimY = P.y - 20 + dy * 100; }
-    c.attack = I.buttons[0] || I.down('Space');
-    c.attackPressed = c.attackPressed || I.clicked[0] || I.hit('Space');
-    c.dash = c.dash || I.clicked[2] || I.hit('ShiftLeft') || I.hit('ShiftRight');
+    // In touch mode the left "mouse button" only ever comes from a menu tap, so it must not swing the sword.
+    c.attack = (I.touch ? false : I.buttons[0]) || I.down('Space') || T.attack;
+    c.attackPressed = c.attackPressed || (I.touch ? false : I.clicked[0]) || I.hit('Space') || T.attackPressed;
+    c.dash = c.dash || I.clicked[2] || I.hit('ShiftLeft') || I.hit('ShiftRight') || T.dashPressed;
+    T.clearEdges();
+  }
+  // Nearest alive, fully-spawned enemy within `range` world px (touch auto-aim).
+  nearestTarget(range) {
+    const P = this.player, E = this.enemies;
+    let best = null, bd = range * range;
+    for (let i = 0; i < E.active; i++) {
+      const e = E.items[i];
+      if (!e.alive || e.state === 'spawn') continue;
+      const d2 = sqr(e.x - P.x) + sqr(e.y - (P.y - 20));
+      if (d2 < bd) { bd = d2; best = e; }
+    }
+    return best;
+  }
+  // Phones only, and only on the tap that starts a run: fullscreen hides the browser chrome.
+  goFullscreen() {
+    if (!this.input.touch || !document.fullscreenEnabled || document.fullscreenElement) return;
+    try { document.documentElement.requestFullscreen?.().catch(() => {}); } catch (e) { /* not allowed */ }
   }
   // ---- fixed step ------------------------------------------------------
   step(dt) {
@@ -433,6 +461,7 @@ TS.Game = class Game {
     else if (st === 'playing' || st === 'dying' || st === 'paused' || st === 'levelup') { ui.drawHUD(this); if (st === 'paused') ui.drawPause(this); if (st === 'levelup') ui.drawLevelUp(this); }
     else if (st === 'gameover') ui.drawEnd(this, false);
     else if (st === 'victory') ui.drawEnd(this, true);
+    if (st === 'playing' && this.input.touch) this.touch.draw(this);
     if (this.showFps) ui.drawFps(this);
   }
   drawTint() {

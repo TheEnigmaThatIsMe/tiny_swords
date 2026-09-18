@@ -2,30 +2,48 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1e1a2e">
 <title>Tiny Swords: Last Stand</title>
 <link rel="icon" href="data:,">
 <style>
-  html, body { margin: 0; padding: 0; background: #1e1a2e; overflow: hidden; height: 100%; }
+  /* Safe-area probe: render.js reads these (and #sa-probe's padding as a fallback). */
+  :root {
+    --sa-t: env(safe-area-inset-top, 0px);
+    --sa-r: env(safe-area-inset-right, 0px);
+    --sa-b: env(safe-area-inset-bottom, 0px);
+    --sa-l: env(safe-area-inset-left, 0px);
+  }
+  html, body { margin: 0; padding: 0; background: #1e1a2e; overflow: hidden; height: 100%;
+    position: fixed; inset: 0; overscroll-behavior: none; }
   canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges;
-    cursor: url("assets/cursor.png") 22 17, auto; }
+    cursor: url("assets/cursor.png") 22 17, auto;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  #sa-probe { position: fixed; left: 0; top: 0; width: 0; height: 0; visibility: hidden;
+    pointer-events: none; padding: var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l); }
   noscript { color: #fff; font-family: sans-serif; padding: 2em; display: block; }
 </style>
 </head>
 <body>
 <canvas id="game" width="1280" height="720"></canvas>
+<div id="sa-probe"></div>
 <noscript>Tiny Swords: Last Stand needs JavaScript enabled.</noscript>
-<script src="src/atlas-data.js?v=1.3.0"></script>
-<script src="src/util.js?v=1.3.0"></script>
-<script src="src/audio.js?v=1.3.0"></script>
-<script src="src/assets.js?v=1.3.0"></script>
-<script src="src/render.js?v=1.3.0"></script>
-<script src="src/input.js?v=1.3.0"></script>
-<script src="src/world.js?v=1.3.0"></script>
-<script src="src/effects.js?v=1.3.0"></script>
-<script src="src/entities.js?v=1.3.0"></script>
-<script src="src/ui.js?v=1.3.0"></script>
-<script src="src/game.js?v=1.3.0"></script>
-<script src="src/main.js?v=1.3.0"></script>
+<script src="src/atlas-data.js?v=1.4.0"></script>
+<script src="src/util.js?v=1.4.0"></script>
+<script src="src/audio.js?v=1.4.0"></script>
+<script src="src/assets.js?v=1.4.0"></script>
+<script src="src/render.js?v=1.4.0"></script>
+<script src="src/input.js?v=1.4.0"></script>
+<script src="src/touch.js?v=1.4.0"></script>
+<script src="src/world.js?v=1.4.0"></script>
+<script src="src/effects.js?v=1.4.0"></script>
+<script src="src/entities.js?v=1.4.0"></script>
+<script src="src/ui.js?v=1.4.0"></script>
+<script src="src/game.js?v=1.4.0"></script>
+<script src="src/main.js?v=1.4.0"></script>
 </body>
 </html>

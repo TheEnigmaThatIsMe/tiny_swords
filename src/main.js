@@ -5,7 +5,18 @@
   const canvas = document.getElementById('game');
   const R = new TS.Renderer(canvas);
   const input = new TS.Input(canvas, R);
-  window.addEventListener('resize', () => R.resize());
+  // Resize robustness: iOS reports stale sizes right after a rotation or a URL-bar slide,
+  // so re-measure a couple of times after the event. Coalesced to at most one resize per frame.
+  let resizePending = false;
+  function doResize() {
+    if (resizePending) return;
+    resizePending = true;
+    requestAnimationFrame(() => { resizePending = false; R.resize(); });
+  }
+  function resizeSettled() { doResize(); setTimeout(doResize, 150); setTimeout(doResize, 500); }
+  window.addEventListener('resize', doResize);
+  window.addEventListener('orientationchange', resizeSettled);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resizeSettled);
   const errors = [];
   window.addEventListener('error', e => { errors.push(String(e.message || e)); });
   window.addEventListener('unhandledrejection', e => { errors.push('unhandledrejection: ' + String(e.reason)); });
@@ -20,7 +31,7 @@
     input.anyGesture = () => { SFX.init(); SFX.resume(); };
     const params = new URLSearchParams(location.search);
     if (params.get('fps') === '1') game.showFps = true;
-    dbg.ready = true; dbg.stats = game.stats; dbg.game = game;
+    dbg.ready = true; dbg.stats = game.stats; dbg.game = game; dbg.touch = game.touch;
     dbg.setBot = on => game.setBot(on);
     dbg.setSpeed = n => { game.speed = Math.max(1, Math.min(20, n | 0)); };
     dbg.start = () => { if (game.state === 'menu') game.startRun(); };

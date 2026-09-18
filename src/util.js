@@ -2,7 +2,7 @@
 // Shared helpers + namespace. Classic scripts: top-level const/class are visible to later scripts.
 const TS = {};
 window.TS = TS;
-TS.VERSION = '1.3.0';
+TS.VERSION = '1.4.0';
 const PI = Math.PI, TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;

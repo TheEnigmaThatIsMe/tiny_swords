@@ -7,6 +7,9 @@ TS.Renderer = class Renderer {
     this.ctx = canvas.getContext('2d', { alpha: false });
     this.zoom = 1; this.ui = 1; this.dpr = 1;
     this.W = 1; this.H = 1;
+    this.phone = false;
+    this.inset = { t: 0, r: 0, b: 0, l: 0 }; // safe-area insets in device px
+    this.saProbe = null;
     this.camX = 0; this.camY = 0; this.shakeX = 0; this.shakeY = 0; this.ox = 0; this.oy = 0;
     this.drawCalls = 0;
     this.scratch = document.createElement('canvas'); this.scratch.width = 320; this.scratch.height = 320;
@@ -15,14 +18,41 @@ TS.Renderer = class Renderer {
     this.lastFont = '';
     this.resize();
   }
+  // Safe-area insets in device px. Custom properties holding env() may not resolve through
+  // getPropertyValue, so fall back to a hidden probe element whose padding uses them.
+  readInsets() {
+    const ins = this.inset, dpr = this.dpr, keys = ['t', 'r', 'b', 'l'];
+    let cs = null, probe = null;
+    try { cs = getComputedStyle(document.documentElement); } catch (e) { cs = null; }
+    for (let i = 0; i < 4; i++) {
+      let v = cs ? parseFloat(cs.getPropertyValue('--sa-' + keys[i])) : NaN;
+      if (!isFinite(v)) {
+        if (!probe) {
+          if (!this.saProbe) this.saProbe = document.getElementById('sa-probe');
+          probe = this.saProbe ? getComputedStyle(this.saProbe) : null;
+        }
+        v = probe ? parseFloat(probe[['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'][i]]) : NaN;
+      }
+      ins[keys[i]] = isFinite(v) && v > 0 ? v * dpr : 0;
+    }
+  }
   resize() {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(320, window.innerWidth), h = Math.max(240, window.innerHeight);
     this.W = Math.floor(w * this.dpr); this.H = Math.floor(h * this.dpr);
     this.canvas.width = this.W; this.canvas.height = this.H;
     this.canvas.style.width = w + 'px'; this.canvas.style.height = h + 'px';
-    this.zoom = Math.max(0.5, Math.ceil((this.H / TS.VIEW_H) * 2) / 2);
-    this.ui = clamp(this.zoom, 1, 2.5);
+    this.phone = Math.min(window.innerWidth || w, window.innerHeight || h) < 600;
+    this.readInsets();
+    if (this.phone) {
+      // Phones: fix the world scale near 0.75 CSS px per world px so the view stays wide enough,
+      // and keep the UI at device scale so buttons and text stay legible.
+      this.zoom = Math.max(0.5, Math.round(0.75 * this.dpr * 2) / 2);
+      this.ui = clamp(Math.max(this.zoom, this.dpr), 1, 2.5);
+    } else {
+      this.zoom = Math.max(0.5, Math.ceil((this.H / TS.VIEW_H) * 2) / 2);
+      this.ui = clamp(this.zoom, 1, 2.5);
+    }
     this.viewW = this.W / this.zoom; this.viewH = this.H / this.zoom;
     this.ctx.imageSmoothingEnabled = false;
     this.lastFont = '';
