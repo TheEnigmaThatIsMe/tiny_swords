@@ -225,17 +225,18 @@ TS.World = class World {
   // ---- queries ----------------------------------------------------------
   tileCenterX(i) { return (i % this.gw) * TILE + 32; }
   tileCenterY(i) { return ((i / this.gw) | 0) * TILE + 32; }
-  // Random shore tile at least `min` px from (px,py); falls back to the farthest sampled.
+  // Random landing tile (see buildSpawnTiles) at least `min` px from (px,py); falls back to the farthest sampled.
   shoreFar(px, py, min, sideFilter) {
+    const tiles = this.spawnTiles;
     let best = -1, bestD = -1;
     for (let k = 0; k < 16; k++) {
-      const i = this.shore[(Math.random() * this.shore.length) | 0];
+      const i = tiles[(Math.random() * tiles.length) | 0];
       if (sideFilter && !sideFilter(i % this.gw, (i / this.gw) | 0)) continue;
       const d = sqr(this.tileCenterX(i) - px) + sqr(this.tileCenterY(i) - py);
       if (d >= min * min) return i;
       if (d > bestD) { bestD = d; best = i; }
     }
-    return best >= 0 ? best : this.shore[(Math.random() * this.shore.length) | 0];
+    return best >= 0 ? best : tiles[(Math.random() * tiles.length) | 0];
   }
   grassFar(px, py, min) {
     let best = -1, bestD = -1;
@@ -255,12 +256,49 @@ TS.World = class World {
     for (let i = 0; i < n; i++) b[i] = this.tiles[i] ? 0 : 1;
     for (let k = 0; k < this.rects.length; k++) {
       const q = this.rects[k];
-      const c0 = Math.floor(q.x0 / TILE), c1 = Math.floor((q.x0 + q.w - 1) / TILE), r0 = Math.floor(q.y0 / TILE), r1 = Math.floor((q.y0 + q.h - 1) / TILE);
+      // A tile is a wall only when the collision rect covers its centre. A building's upper rows are
+      // drawn height, not footprint: they stay open to enemies exactly as they are to the player, so
+      // the flow field never marks a strip as impassable that bodies can physically wander into.
+      const c0 = Math.ceil((q.x0 - 32) / TILE), c1 = Math.floor((q.x0 + q.w - 32) / TILE), r0 = Math.ceil((q.y0 - 32) / TILE), r1 = Math.floor((q.y0 + q.h - 32) / TILE);
       for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (c >= 0 && r >= 0 && c < gw && r < gh) b[r * gw + c] = 1;
     }
-    for (let k = 0; k < this.obstacles.length; k++) { const o = this.obstacles[k]; if (o.r >= 14) b[Math.floor(o.y / TILE) * gw + Math.floor(o.x / TILE)] = 1; }
+    // Every obstacle tile is off-limits to routing so the field never steers a body into a gap between
+    // a boulder and the shore that is narrower than the body. Trunks and big stones (1) also cut line of
+    // sight; small rocks and stumps (2) do not, since arrows fly over them (see blocksArrow).
+    for (let k = 0; k < this.obstacles.length; k++) { const o = this.obstacles[k], i = Math.floor(o.y / TILE) * gw + Math.floor(o.x / TILE); if (o.r >= 14) b[i] = 1; else if (!b[i]) b[i] = 2; }
     this.dist = new Float32Array(n); this.flowX = new Float32Array(n); this.flowY = new Float32Array(n);
     this.hi = new Int32Array(n * 8); this.hk = new Float32Array(n * 8); this.flowTile = -1;
+    this.buildSpawnTiles();
+  }
+  // Open tiles joined to the main body of the island (4-connected, which is exactly what the flow
+  // field can reach since it never cuts corners). Enemies spawn only on shore tiles in that body that
+  // are outside every building's reserved ring, so a landing can never start in a wall, on a trunk or
+  // in a pocket between a tower and the water that the flow field cannot lead out of.
+  buildSpawnTiles() {
+    const gw = this.gw, gh = this.gh, n = gw * gh, b = this.blocked;
+    const comp = new Int32Array(n).fill(-1), stack = new Int32Array(n), sizes = [];
+    for (let s = 0; s < n; s++) {
+      if (b[s] || comp[s] >= 0) continue;
+      const id = sizes.length; let sp = 0, size = 0; stack[sp++] = s; comp[s] = id;
+      while (sp > 0) {
+        const i = stack[--sp]; size++;
+        const c = i % gw, r = (i / gw) | 0;
+        if (r > 0 && !b[i - gw] && comp[i - gw] < 0) { comp[i - gw] = id; stack[sp++] = i - gw; }
+        if (r < gh - 1 && !b[i + gw] && comp[i + gw] < 0) { comp[i + gw] = id; stack[sp++] = i + gw; }
+        if (c > 0 && !b[i - 1] && comp[i - 1] < 0) { comp[i - 1] = id; stack[sp++] = i - 1; }
+        if (c < gw - 1 && !b[i + 1] && comp[i + 1] < 0) { comp[i + 1] = id; stack[sp++] = i + 1; }
+      }
+      sizes.push(size);
+    }
+    let main = 0; for (let k = 1; k < sizes.length; k++) if (sizes[k] > sizes[main]) main = k;
+    const reach = this.reachable = new Uint8Array(n);
+    for (let i = 0; i < n; i++) reach[i] = comp[i] === main ? 1 : 0;
+    const shore = this.shore, reserved = this.reserved;
+    let tiles = [];
+    for (let k = 0; k < shore.length; k++) { const i = shore[k]; if (reach[i] && !reserved[i]) tiles.push(i); }
+    if (tiles.length < 8) { tiles = []; for (let k = 0; k < shore.length; k++) { const i = shore[k]; if (reach[i]) tiles.push(i); } }
+    if (!tiles.length) tiles = shore.slice();
+    this.spawnTiles = tiles;
   }
   // Recomputes only when the player changes tile. ~1.5k tiles, well under a millisecond.
   computeFlow(px, py) {
@@ -304,16 +342,27 @@ TS.World = class World {
   flowAt(x, y, out) {
     const c = Math.floor(x / TILE), r = Math.floor(y / TILE);
     if (c < 0 || r < 0 || c >= this.gw || r >= this.gh) return false;
-    const i = r * this.gw + c; if (this.dist[i] >= 1e9) return false;
-    out.ux = this.flowX[i]; out.uy = this.flowY[i];
-    return out.ux !== 0 || out.uy !== 0;
+    const gw = this.gw, dist = this.dist, i = r * gw + c;
+    if (dist[i] < 1e9) { out.ux = this.flowX[i]; out.uy = this.flowY[i]; return out.ux !== 0 || out.uy !== 0; }
+    // Off the field (shoved onto a trunk tile, lured behind a wall): walk to the centre of the
+    // best-connected neighbouring tile instead of pressing straight at the player through whatever is in the way.
+    let best = 1e9, bc = 0, br = 0;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const nc = c + dc, nr = r + dr; if (nc < 0 || nr < 0 || nc >= gw || nr >= this.gh) continue;
+      const d = dist[nr * gw + nc]; if (d < best) { best = d; bc = nc; br = nr; }
+    }
+    if (best >= 1e9) return false;
+    const tx = bc * TILE + 32 - x, ty = br * TILE + 32 - y, l = Math.sqrt(tx * tx + ty * ty) || 1;
+    out.ux = tx / l; out.uy = ty / l;
+    return true;
   }
   // Straight-line visibility across the blocked grid (walls, water, trunks).
   los(x0, y0, x1, y1) {
     const dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy), steps = Math.ceil(len / 24);
     for (let s = 1; s < steps; s++) {
       const t = s / steps, c = Math.floor((x0 + dx * t) / TILE), r = Math.floor((y0 + dy * t) / TILE);
-      if (c < 0 || r < 0 || c >= this.gw || r >= this.gh || this.blocked[r * this.gw + c]) return false;
+      if (c < 0 || r < 0 || c >= this.gw || r >= this.gh || this.blocked[r * this.gw + c] === 1) return false;
     }
     return true;
   }
