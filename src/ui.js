@@ -2,6 +2,8 @@
 // HUD, menus and immediate-mode buttons. All coordinates are device pixels; `u` is the UI scale.
 const RIBBON = { blue: 0, red: 1, yellow: 2, purple: 3, black: 4 };
 const NO_INSET = { t: 0, r: 0, b: 0, l: 0 }; // R.inset default before Renderer.resize() sets the real safe-area insets
+// Largest font size <= `size` at which `str` fits in `maxW` device px (text width scales linearly with size).
+function fitSize(R, str, size, maxW) { const w = R.textWidth(str, size); return w > maxW ? Math.max(6, size * maxW / w) : size; }
 TS.UI = class UI {
   constructor(R, input) {
     this.R = R; this.input = input; this.clickedId = null; this.hoverCard = -1; this.vignette = null; this.vigW = 0; this.vigH = 0;
@@ -10,16 +12,21 @@ TS.UI = class UI {
   }
   consumeClick(id) { if (this.clickedId === id) { this.clickedId = null; return true; } return false; }
   // --- primitives ----------------------------------------------------------
-  ribbon(text, cx, y, style, size, minW, scale) {
+  // maxW caps the band (default: the canvas minus a small gutter); the label shrinks to fit inside it.
+  ribbon(text, cx, y, style, size, minW, scale, maxW) {
     const R = this.R, u = R.ui, sc = u * 0.55 * (scale || 1);
-    const tw = R.textWidth(text, size); const w = Math.max(minW || 0, tw + 150 * sc);
+    if (maxW === undefined) maxW = R.W - 12 * u;
+    size = fitSize(R, text, size, maxW - 150 * sc);
+    const tw = R.textWidth(text, size); const w = Math.min(maxW, Math.max(minW || 0, tw + 150 * sc));
     const h = R.three('ribbon_big', RIBBON[style], cx - w / 2, y, w, sc);
     R.text(text, cx, y + h * 0.47, size, '#fff8e7', 'center', 'middle', '#2a1e3a', size * 0.16);
     return h;
   }
-  smallRibbon(text, cx, y, style, size, minW, scale) {
+  smallRibbon(text, cx, y, style, size, minW, scale, maxW) {
     const R = this.R, u = R.ui, sc = u * 0.55 * (scale || 1);
-    const tw = R.textWidth(text, size); const w = Math.max(minW || 0, tw + 90 * sc);
+    if (maxW === undefined) maxW = R.W - 12 * u;
+    size = fitSize(R, text, size, maxW - 90 * sc);
+    const tw = R.textWidth(text, size); const w = Math.min(maxW, Math.max(minW || 0, tw + 90 * sc));
     const h = R.three('ribbon_small', RIBBON[style] * 2, cx - w / 2, y, w, sc);
     R.text(text, cx, y + h * 0.42, size, '#fff8e7', 'center', 'middle', '#2a1e3a', size * 0.16);
     return h;
@@ -36,14 +43,28 @@ TS.UI = class UI {
     return hover;
   }
   overlay(alpha) { this.R.rect(0, 0, this.R.W, this.R.H, '#0b0a14', alpha); }
+  fit(str, size, maxW) { return fitSize(this.R, str, size, maxW); }
+  compact() { const R = this.R, u = R.ui; return R.H < 560 * u || R.W < 760 * u; } // phone-sized canvas: the compact screen layouts
   wrap(str, size, maxW) {
     const words = str.split(' '), lines = []; let line = '';
     for (const w of words) { const t = line ? line + ' ' + w : w; if (this.R.textWidth(t, size) > maxW && line) { lines.push(line); line = w; } else line = t; }
     if (line) lines.push(line);
     return lines;
   }
+  // Like wrap(), but a two-line result is re-split at the word boundary that evens the lines out.
+  wrapBalanced(str, size, maxW) {
+    const lines = this.wrap(str, size, maxW); if (lines.length !== 2) return lines;
+    const R = this.R, words = str.split(' '); let best = lines, bestDiff = Infinity;
+    for (let i = 1; i < words.length; i++) {
+      const a = words.slice(0, i).join(' '), b = words.slice(i).join(' '), wa = R.textWidth(a, size), wb = R.textWidth(b, size);
+      if (wa > maxW || wb > maxW) continue;
+      const d = Math.abs(wa - wb); if (d < bestDiff) { bestDiff = d; best = [a, b]; }
+    }
+    return best;
+  }
   // --- HUD -----------------------------------------------------------------
   drawHUD(g) {
+    if (g.state === 'levelup' && this.compact()) return; // the phone level-up modal covers the whole screen
     const R = this.R, u = R.ui, P = g.player, A = this.A, I = this.input;
     const ins = R.inset || NO_INSET, il = ins.l, it = ins.t, ir = ins.r, ib = ins.b;
     const touch = !!I.touch, dpr = R.dpr, W = R.W, H = R.H;
@@ -176,14 +197,19 @@ TS.UI = class UI {
     this.drawAnnouncement(g);
   }
   drawAnnouncement(g) {
-    const a = g.announcement; if (!a) return;
+    const a = g.announcement; if (!a || g.state === 'levelup' || g.state === 'paused') return; // modals own the screen
     const R = this.R, u = R.ui, k = a.t / a.dur;
     let sc = 1, alpha = 1;
     if (a.t < 0.25) sc = 0.6 + 1.6 * (a.t / 0.25) - 1.2 * sqr(a.t / 0.25); // pop-in
     if (k > 0.8) alpha = (1 - k) / 0.2;
     R.ctx.globalAlpha = alpha;
     this.ribbon(a.text, R.W / 2, R.H * 0.22, a.style, 30 * u * sc, 320 * u * sc);
-    if (a.sub) R.text(a.sub, R.W / 2, R.H * 0.22 + 70 * u, 15 * u, '#fff', 'center', 'middle');
+    if (a.sub) {
+      // Long tips ('Red line = charge path. ...') wrap to two lines on a portrait phone rather than clipping.
+      const maxW = R.W - 24 * u; let sz = 15 * u, lines = this.wrapBalanced(a.sub, sz, maxW);
+      if (lines.length > 2) { sz = 12 * u; lines = this.wrapBalanced(a.sub, sz, maxW); }
+      for (let l = 0; l < lines.length; l++) R.text(lines[l], R.W / 2, R.H * 0.22 + 70 * u + l * (sz + 4 * u), sz, '#fff', 'center', 'middle');
+    }
     R.ctx.globalAlpha = 1;
   }
   drawFps(g) {
@@ -199,7 +225,7 @@ TS.UI = class UI {
   drawMenu(g) {
     const R = this.R, u = R.ui, W = R.W, H = R.H, I = this.input, touch = !!I.touch;
     this.overlay(0.22);
-    const compact = H < 560 * u || W < 760 * u;
+    const compact = this.compact();
     if (!compact) {
       this.ribbon('TINY SWORDS', W / 2, H * 0.09, 'blue', 46 * u, 520 * u);
       this.smallRibbon('LAST STAND', W / 2, H * 0.09 + 78 * u, 'yellow', 22 * u, 220 * u);
@@ -257,7 +283,7 @@ TS.UI = class UI {
   drawEnd(g, won) {
     const R = this.R, u = R.ui, W = R.W, H = R.H, I = this.input, touch = !!I.touch;
     this.overlay(0.55);
-    const compact = H < 560 * u || W < 760 * u;
+    const compact = this.compact();
     if (!compact) {
       this.ribbon(won ? 'DAWN BREAKS' : 'FALLEN', W / 2, H * 0.12, won ? 'yellow' : 'red', 44 * u, 420 * u);
       R.text(won ? 'You held the line until sunrise.' : 'The night took the island.', W / 2, H * 0.12 + 92 * u, 16 * u, '#fff', 'center', 'middle');
@@ -309,13 +335,14 @@ TS.UI = class UI {
   }
   drawLevelUp(g) {
     const R = this.R, u = R.ui, W = R.W, H = R.H, I = this.input, A = this.A, touch = !!I.touch;
+    this.hoverCard = -1;
+    if (this.compact()) { this.overlay(0.6); this.drawLevelUpCompact(g); return; }
     this.overlay(0.5);
     this.ribbon('LEVEL ' + g.player.level, W / 2, H * 0.08, 'purple', 34 * u, 360 * u);
     R.text(touch ? 'Choose an upgrade  ·  tap a card' : 'Choose an upgrade  ·  1 / 2 / 3 or click', W / 2, H * 0.08 + 82 * u, 14 * u, '#fff', 'center', 'middle');
     const headerBottom = H * 0.08 + 110 * u;
     const cwWide = Math.min(250 * u, (W - 80 * u) / 3 - 10 * u);
     const stacked = cwWide < 170 * u || headerBottom + 300 * u > H - 30 * u;
-    this.hoverCard = -1;
     if (!stacked) {
       const cw = cwWide, ch = 300 * u, gap = 22 * u;
       const total = cw * 3 + gap * 2, x0 = W / 2 - total / 2, y0 = headerBottom;
@@ -372,10 +399,78 @@ TS.UI = class UI {
       if (hover && I.clicked[0]) this.clickedId = 'card' + i;
     }
   }
+  // Phone layout: a small header, then three columns in landscape or three rows in portrait. Every
+  // card is sized from the canvas (minus the safe-area insets) so its text never spills past the
+  // card or the screen, on a short Safari-landscape viewport included.
+  drawLevelUpCompact(g) {
+    const R = this.R, u = R.ui, W = R.W, H = R.H, I = this.input, A = this.A, touch = !!I.touch;
+    const ins = R.inset || NO_INSET;
+    const dot = (r, rank) => r < rank ? '#c9302c' : r === rank ? '#f0a030' : '#d8c8a8';
+    const left = ins.l + 12 * u, right = W - ins.r - 12 * u, bottom = H - ins.b - 12 * u;
+    let y = ins.t + 6 * u;
+    y += this.smallRibbon('LEVEL ' + g.player.level, W / 2, y, 'purple', 15 * u, 150 * u, 0.85) + 10 * u;
+    const hint = touch ? 'Choose an upgrade  ·  tap a card' : 'Choose an upgrade  ·  1 / 2 / 3 or click';
+    R.text(hint, W / 2, y, this.fit(hint, 10 * u, right - left), '#fff', 'center', 'middle');
+    y += 14 * u;
+    const card = (i, x, cy, w, h) => {
+      const hover = I.mouseIn(x, cy, w, h) && (!touch || I.buttons[0]);
+      if (hover) this.hoverCard = i;
+      const yy = cy + (hover ? -4 * u : 0);
+      this.rects['card' + i] = { x, y: yy, w, h };
+      this.panel(x, yy, w, h);
+      if (hover && I.clicked[0]) this.clickedId = 'card' + i;
+      return yy;
+    };
+    if (W > H) {
+      // landscape: three columns filling the height below the header
+      const gap = 10 * u, cw = Math.min(250 * u, (right - left - 2 * gap) / 3), avail = bottom - y, ch = Math.min(200 * u, avail);
+      const x0 = W / 2 - (cw * 3 + 2 * gap) / 2, y0 = y + (avail - ch) * 0.4, short = ch < 190 * u;
+      for (let i = 0; i < 3; i++) {
+        const c = g.choices[i], x = x0 + i * (cw + gap), yy = card(i, x, y0, cw, ch), cx = x + cw / 2;
+        const iconCy = yy + (short ? 30 : 42) * u;
+        R.uiSprite(A.sheet('banner_slot'), 0, cx, iconCy, u * (short ? 0.2 : 0.28));
+        R.uiSpriteCentered(A.sheet(c.icon), c.frame || 0, cx, iconCy, (c.frame !== undefined ? 0.3 : 0.42) * u * (short ? 0.72 : 1));
+        if (!touch) R.text('[' + (i + 1) + ']', x + 10 * u, yy + 12 * u, 9 * u, '#7a2d1a', 'left', 'middle', null);
+        const rank = g.player.upg[c.key] || 0;
+        let ty = iconCy + (short ? 28 : 40) * u;
+        R.text(c.name, cx, ty, this.fit(c.name, 12 * u, cw - 20 * u), '#3b2a1a', 'center', 'middle', null); ty += 14 * u;
+        let px = cx - (c.max * 12 * u) / 2 + 6 * u;
+        for (let r = 0; r < c.max; r++) { R.rect(px - 4 * u, ty - 4 * u, 8 * u, 8 * u, dot(r, rank)); px += 12 * u; }
+        ty += 16 * u;
+        const lines = this.wrap(c.desc, 10 * u, cw - 22 * u), maxLines = Math.max(1, Math.floor((yy + ch - 8 * u - ty) / (13 * u)));
+        for (let l = 0; l < Math.min(lines.length, maxLines); l++) R.text(lines[l], cx, ty + l * 13 * u, 10 * u, '#3b2a1a', 'center', 'middle', null);
+        ty += Math.min(lines.length, maxLines) * 13 * u;
+        if (c.flavor && ty + 18 * u <= yy + ch - 10 * u) R.text(c.flavor, cx, yy + ch - 14 * u, this.fit(c.flavor, 8.5 * u, cw - 20 * u), '#7a2d1a', 'center', 'middle', null);
+      }
+      return;
+    }
+    // portrait: three rows, icon on the left and the text block vertically centred in each row
+    const gap = 8 * u, rowW = right - left, rowH = Math.min(150 * u, (bottom - y - 2 * gap) / 3);
+    const iconS = clamp(rowH * 0.6, 44 * u, 90 * u), slotSc = iconS / 185; // banner_slot is 185 px wide at scale 1
+    for (let i = 0; i < 3; i++) {
+      const c = g.choices[i], yy = card(i, left, y + i * (rowH + gap), rowW, rowH);
+      const iconCx = left + 12 * u + iconS / 2, iconCy = yy + rowH / 2;
+      R.uiSprite(A.sheet('banner_slot'), 0, iconCx, iconCy, slotSc);
+      R.uiSpriteCentered(A.sheet(c.icon), c.frame || 0, iconCx, iconCy, slotSc * (c.frame !== undefined ? 1.5 : 2.1));
+      const rank = g.player.upg[c.key] || 0, name = (touch ? '' : '[' + (i + 1) + ']  ') + c.name;
+      const tx = left + iconS + 24 * u, textW = rowW - iconS - 36 * u;
+      const maxLines = clamp(Math.floor((rowH - 40 * u) / (13 * u)), 1, 4);
+      const lines = this.wrap(c.desc, 10 * u, textW).slice(0, maxLines);
+      const flavor = c.flavor && rowH >= 110 * u && lines.length < maxLines;
+      const blockH = 30 * u + lines.length * 13 * u + (flavor ? 15 * u : 0);
+      let ty = yy + Math.max(8 * u, (rowH - blockH) / 2) + 7 * u;
+      R.text(name, tx, ty, this.fit(name, 12 * u, textW), '#3b2a1a', 'left', 'middle', null); ty += 14 * u;
+      let px = tx;
+      for (let r = 0; r < c.max; r++) { R.rect(px, ty - 4 * u, 8 * u, 8 * u, dot(r, rank)); px += 12 * u; }
+      ty += 16 * u;
+      for (let l = 0; l < lines.length; l++) R.text(lines[l], tx, ty + l * 13 * u, 10 * u, '#3b2a1a', 'left', 'middle', null);
+      if (flavor) R.text(c.flavor, tx, ty + lines.length * 13 * u + 2 * u, this.fit(c.flavor, 8.5 * u, textW), '#7a2d1a', 'left', 'middle', null);
+    }
+  }
   drawPause(g) {
     const R = this.R, u = R.ui, W = R.W, H = R.H, I = this.input, touch = !!I.touch;
     this.overlay(0.5);
-    const compact = H < 560 * u || W < 760 * u;
+    const compact = this.compact();
     if (!compact) {
       this.ribbon('PAUSED', W / 2, H * 0.18, 'blue', 40 * u, 340 * u);
       const lines = ['ESC / P — resume', 'M — mute', 'F — FPS counter', 'Q — quit to title'];
@@ -401,8 +496,9 @@ TS.UI = class UI {
     const u = R.ui, c = R.ctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
     R.rect(0, 0, R.W, R.H, '#47aba9');
-    R.text('TINY SWORDS: LAST STAND', R.W / 2, R.H / 2 - 40 * u, 28 * u, '#fff', 'center', 'middle');
-    const w = 320 * u, x = R.W / 2 - w / 2, y = R.H / 2;
+    const title = 'TINY SWORDS: LAST STAND';
+    R.text(title, R.W / 2, R.H / 2 - 40 * u, fitSize(R, title, 28 * u, R.W - 32 * u), '#fff', 'center', 'middle');
+    const w = Math.min(320 * u, R.W - 40 * u), x = R.W / 2 - w / 2, y = R.H / 2;
     R.rect(x, y, w, 14 * u, '#1e1a2e'); R.rect(x + 2 * u, y + 2 * u, (w - 4 * u) * frac, 10 * u, '#ffd54a');
     R.text(err ? err : 'loading ' + Math.round(frac * 100) + '%', R.W / 2, y + 40 * u, 14 * u, err ? '#ff8080' : '#fff', 'center', 'middle');
   }
